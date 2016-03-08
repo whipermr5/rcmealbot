@@ -1,0 +1,21 @@
+application: rcmealbot
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: yes
+
+handlers:
+- url: /(message|migrate)
+  script: rcmealbot.app
+  login: admin
+
+- url: /favicon.ico
+  static_files: favicon.ico
+  upload: favicon.ico
+
+- url: .*
+  script: rcmealbot.app
+
+libraries:
+- name: webapp2
+  version: "2.5.2"

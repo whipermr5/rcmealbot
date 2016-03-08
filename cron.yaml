@@ -1,0 +1,5 @@
+cron:
+- description: keep alive
+  url: /auth
+  schedule: every 10 minutes synchronized
+  timezone: Asia/Singapore
