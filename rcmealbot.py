@@ -789,7 +789,7 @@ class MenuPage(webapp2.RequestHandler):
 
         for tag in soup.select('p'):
             text = tag.text.strip().replace('*', '')
-            tag.string = '\n_' + text + '_\n'
+            tag.string = '\n' + u'\U0001F34A' + ' _' + text + '_\n'
 
         start_date_text = soup.select('.day-1 h4')[0].text
         idx = start_date_text.find('\n')
@@ -798,9 +798,9 @@ class MenuPage(webapp2.RequestHandler):
 
         for tag in soup.select('h4'):
             if 'breakfast' in tag.text.lower():
-                text = '*Breakfast*'
+                text = u'\U0001F32E' + ' *Breakfast*'
             else:
-                text = '*Dinner*'
+                text = u'\U0001F35C' + ' *Dinner*'
             tag.string = text + '\n'
 
         for tag in soup.select('tr'):
@@ -815,7 +815,7 @@ class MenuPage(webapp2.RequestHandler):
                 menu += tag.text.strip() + '\n'
             menu = menu.replace('\n-\n', '\n\n').strip()
             if i % 6 == 5:
-                dinner_start = menu.find('*Dinner*')
+                dinner_start = menu.find(u'\U0001F35C' + ' *Dinner*')
                 fruit_start = menu.find('_')
                 fruit_end = menu.find('_', fruit_start + 1)
                 fruit = menu[fruit_start:fruit_end + 1]
