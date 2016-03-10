@@ -4,6 +4,7 @@ import json
 import textwrap
 import xlrd
 import ast
+import parsedatetime
 from google.appengine.api import urlfetch, urlfetch_errors, taskqueue
 from google.appengine.ext import db
 from datetime import datetime, timedelta
@@ -420,7 +421,7 @@ class MainPage(webapp2.RequestHandler):
         cmd = text.lower().strip()
 
         def is_command(word):
-            return cmd == '/' + word
+            return cmd.startswith('/' + word)
 
         if is_command('login'):
             if user.is_authenticated():
@@ -494,18 +495,20 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, '*Weekly Summary*\n' + weekly_summary(xls_data) + '\n\n' + meals, markdown=True)
 
         elif is_command('menu'):
+            if len(cmd) > 5:
+                date_arg = cmd[5:].strip()
+                today_date = parsedatetime.Calendar().parseDT(date_arg, datetime.utcnow() + timedelta(hours=8))[0].date()
+            else:
+                today_date = (datetime.utcnow() + timedelta(hours=8)).date()
             menus = ast.literal_eval(get_data().menus)
             max_day = len(menus)
             start_date = get_data().start_date
-            today_date = (datetime.utcnow() + timedelta(hours=8)).date()
             day = (today_date - start_date).days
-            logging.info(today_date)
-            logging.info(start_date)
-            logging.info(day)
+            friendly_date = today_date.strftime('%d %B %Y (%a)')
             if day < 0 or day > max_day:
-                send_message(user, 'Sorry, OHS has not uploaded the menu for today yet')
+                send_message(user, 'Sorry, OHS has not uploaded the menu for {} yet'.format(friendly_date))
             else:
-                send_message(user, menus[day], markdown=True)
+                send_message(user, 'Menu for {}\n\n'.format(friendly_date) + menus[day], markdown=True)
 
         else:
             if not user.is_authenticated():
