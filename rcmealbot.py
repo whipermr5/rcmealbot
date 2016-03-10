@@ -3,9 +3,11 @@ import logging
 import json
 import textwrap
 import xlrd
+import ast
 from google.appengine.api import urlfetch, urlfetch_errors, taskqueue
 from google.appengine.ext import db
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 
 BASE_URL = 'https://myaces.nus.edu.sg/Prjhml/'
 UNAUTHORISED = 'empty'
@@ -235,6 +237,10 @@ class User(db.Model):
         self.last_auto = get_today_time()
         self.put()
 
+class Data(db.Model):
+    menus = db.TextProperty()
+    start_date = db.DateProperty(indexed=False)
+
 def get_user(uid):
     key = db.Key.from_path('User', str(uid))
     user = db.get(key)
@@ -242,6 +248,14 @@ def get_user(uid):
         user = User(key_name=str(uid), first_name='-')
         user.put()
     return user
+
+def get_data():
+    key = db.Key.from_path('Data', 'main')
+    data = db.get(key)
+    if data == None:
+        data = Data(key_name='main')
+        data.put()
+    return data
 
 def update_profile(uid, uname, fname, lname):
     existing_user = get_user(uid)
@@ -479,6 +493,20 @@ class MainPage(webapp2.RequestHandler):
 
             send_message(user, '*Weekly Summary*\n' + weekly_summary(xls_data) + '\n\n' + meals, markdown=True)
 
+        elif is_command('menu'):
+            menus = ast.literal_eval(get_data().menus)
+            max_day = len(menus)
+            start_date = get_data().start_date
+            today_date = (datetime.utcnow() + timedelta(hours=8)).date()
+            day = (today_date - start_date).days
+            logging.info(today_date)
+            logging.info(start_date)
+            logging.info(day)
+            if day < 0 or day > max_day:
+                send_message(user, 'Sorry, OHS has not uploaded the menu for today yet')
+            else:
+                send_message(user, menus[day], markdown=True)
+
         else:
             if not user.is_authenticated():
                 send_message(user, 'Did you mean to /login?')
@@ -520,6 +548,27 @@ class SendPage(webapp2.RequestHandler):
         if self.run() == False:
             self.abort(502)
 
+class MessagePage(webapp2.RequestHandler):
+    def post(self):
+        params = json.loads(self.request.body)
+        msg_type = params.get('msg_type')
+        data = params.get('data')
+        uid = str(json.loads(data).get('chat_id'))
+        user = get_user(uid)
+
+        try:
+            result = telegram_post(data, 4)
+        except urlfetch_errors.Error as e:
+            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_name_string(), str(e)))
+            logging.debug(data)
+            self.abort(502)
+
+        response = json.loads(result.content)
+
+        if handle_response(response, user, uid, msg_type) == False:
+            logging.debug(data)
+            self.abort(502)
+
 class AuthPage(webapp2.RequestHandler):
     def run(self):
         query = User.all()
@@ -551,31 +600,83 @@ class AuthPage(webapp2.RequestHandler):
         if self.run() == False:
             self.abort(502)
 
+class MenuPage(webapp2.RequestHandler):
+    def get(self):
+        url = 'http://nus.edu.sg/ohs/current-residents/students/dining-daily.php'
+        try:
+            result = urlfetch.fetch(url, deadline=10)
+        except urlfetch_errors.Error as e:
+            logging.warning(LOG_ERROR_REMOTE + str(e))
+        html = result.content
+        soup = BeautifulSoup(html, 'lxml')
+
+        for tag in soup.select('.menu-selector'):
+            tag.decompose()
+
+        for tag in soup.select('.menu-legend'):
+            tag.name = 'span'
+            tag.string = '\n'
+
+        for tag in soup.select('.td-cat img'):
+            text = tag.get('alt')
+            if text == 'Description':
+                text = 'Others'
+            tag.string = '\n-\n*~ ' + text + ' ~*\n'
+
+        for tag in soup.select('br'):
+            tag.name = 'span'
+            tag.string = '\n'
+
+        for tag in soup.select('p'):
+            text = tag.text.strip().replace('*', '')
+            tag.string = '\n_' + text + '_\n'
+
+        start_date_text = soup.select('.day-1 h4')[0].text
+        idx = start_date_text.find('\n')
+        start_date_text = start_date_text[:idx]
+        start_date = datetime.strptime(start_date_text, "%d %b %Y").date()
+
+        for tag in soup.select('h4'):
+            if 'breakfast' in tag.text.lower():
+                text = '*Breakfast*'
+            else:
+                text = '*Dinner*'
+            tag.string = text + '\n'
+
+        for tag in soup.select('tr'):
+            text = tag.text.strip()
+            tag.string = text + '\n'
+
+        days = len(soup.select('.day-menu'))
+        menus = []
+        for i in range(days):
+            menu = ''
+            for tag in soup(class_='day-' + str(i + 1)):
+                menu += tag.text.strip() + '\n'
+            menu = menu.replace('\n-\n', '\n\n').strip()
+            if i % 6 == 5:
+                dinner_start = menu.find('*Dinner*')
+                fruit_start = menu.find('_')
+                fruit_end = menu.find('_', fruit_start + 1)
+                fruit = menu[fruit_start:fruit_end + 1]
+                breakfast = menu[:dinner_start] + fruit
+                dinner = menu[dinner_start:]
+                menus.append(breakfast)
+                menus.append(dinner)
+            else:
+                menus.append(menu)
+        days = len(menus)
+        data = get_data()
+        data.menus = str(menus)
+        data.start_date = start_date
+        data.put()
+        self.response.headers['Content-Type'] = 'text/plain'
+        self.response.write('Done updating menu starting from {} for {} days:\n'.format(start_date_text, days) + get_data().menus)
+
 class MigratePage(webapp2.RequestHandler):
     def get(self):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
-
-class MessagePage(webapp2.RequestHandler):
-    def post(self):
-        params = json.loads(self.request.body)
-        msg_type = params.get('msg_type')
-        data = params.get('data')
-        uid = str(json.loads(data).get('chat_id'))
-        user = get_user(uid)
-
-        try:
-            result = telegram_post(data, 4)
-        except urlfetch_errors.Error as e:
-            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_name_string(), str(e)))
-            logging.debug(data)
-            self.abort(502)
-
-        response = json.loads(result.content)
-
-        if handle_response(response, user, uid, msg_type) == False:
-            logging.debug(data)
-            self.abort(502)
 
 class MassPage(webapp2.RequestHandler):
     def get(self):
@@ -590,6 +691,7 @@ app = webapp2.WSGIApplication([
     ('/send', SendPage),
     ('/message', MessagePage),
     ('/auth', AuthPage),
-    ('/mass', MassPage),
     ('/migrate', MigratePage),
+    ('/mass', MassPage),
+    ('/menu', MenuPage),
 ], debug=True)

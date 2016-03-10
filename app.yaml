@@ -5,7 +5,7 @@ api_version: 1
 threadsafe: yes
 
 handlers:
-- url: /(message|migrate)
+- url: /(message|migrate|menu)
   script: rcmealbot.app
   login: admin
 
@@ -19,3 +19,5 @@ handlers:
 libraries:
 - name: webapp2
   version: "2.5.2"
+- name: lxml
+  version: "2.3"
