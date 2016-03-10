@@ -393,6 +393,13 @@ def send_typing(uid):
         return
 
 class MainPage(webapp2.RequestHandler):
+    WELCOME = 'Hello, {}! Welcome! To get started, enter one of the following commands:\n\n'
+    HELP = 'Hi {}! Please enter one of the following commands:\n\n'
+    ABOUT = 'Created by @whipermr5. Comments, feedback and suggestions are welcome!\n\n' + \
+            'Food menu extracted from http://nus.edu.sg/ohs/current-residents/students/dining-daily.php\n\n' + \
+            'P.S. CAPT rocks! And God loves you :)'
+    UNRECOGNISED = 'Sorry {}, I couldn\'t understand that. ' + \
+                   'Please enter one of the following commands:\n\n'
     REMOTE_ERROR = 'Sorry {}, I\'m having some difficulty accessing the site. ' + \
                    'Please try again later.'
 
@@ -401,6 +408,30 @@ class MainPage(webapp2.RequestHandler):
         self.response.write('RCMealBot backend running...\n')
 
     def post(self):
+        def build_command_list():
+            cmds = '/checkmeals - check meal credits' if user.is_authenticated() else '/login - to check meal credits'
+            cmds += '\n/checkmenu - view today\'s menu'
+            cmds += '\n/checkmenu <date> - view the menu for a particular day'
+            cmds += '\n/settings - turn on/off automatic updates'
+            cmds += '\n/about - about this bot'
+            cmds += '\n/logout' if user.is_authenticated() else ''
+            return cmds
+
+        def build_settings_list():
+            cmds = 'Hi, {}!'.format(user.get_first_name())
+            if user.is_authenticated():
+                cmds += ' You are logged in as *{}* _({})_.'.format(user.full_name, user.matric)
+                cmds += ' Weekly meal reports (sent on Sunday nights) are *' + ('on' if user.is_active_weekly() else 'off') + '*.'
+            else:
+                cmds += ' You are *not* logged in.'
+            cmds += ' Daily menu updates (sent at midnight) are *' + ('on' if user.is_active() else 'off') + '*.\n\n'
+            cmds += '/weeklyoff - turn off weekly meal reports' if user.is_active_weekly() else '/weeklyon - turn on weekly meal reports'
+            cmds += '\n/dailyoff - turn off daily menu updates' if user.is_active() else '\n/dailyon - turn on daily menu updates'
+            return cmds
+
+        def is_command(word):
+            return cmd.startswith('/' + word)
+
         data = json.loads(self.request.body)
         logging.debug(self.request.body)
 
@@ -431,7 +462,7 @@ class MainPage(webapp2.RequestHandler):
                 logging.info(LOG_TYPE_START_EXISTING)
                 new_user = False
 
-            send_message(user, 'Welcome {}! Now you can /login'.format(first_name))
+            send_message(user, self.WELCOME.format(first_name) + build_command_list())
 
             if new_user:
                 send_message(ADMIN_ID, 'New user: ' + user.get_name_string())
@@ -446,10 +477,26 @@ class MainPage(webapp2.RequestHandler):
 
         cmd = text.lower().strip()
 
-        def is_command(word):
-            return cmd.startswith('/' + word)
+        if is_command('checkmeals'):
+            if not user.is_authenticated():
+                send_message(user, 'Did you mean to /login?')
+                return
 
-        if is_command('login'):
+            send_typing(uid)
+            xls_data = check_meals(user.jsessionid, get_excel=True)
+            meals = check_meals(user.jsessionid)
+
+            if not xls_data or not meals:
+                send_message(user, self.REMOTE_ERROR.format(first_name))
+                return
+            elif xls_data == UNAUTHORISED or meals == UNAUTHORISED:
+                user.set_authenticated(False)
+                send_message(user, SESSION_EXPIRED.format(first_name))
+                return
+
+            send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
+
+        elif is_command('login'):
             if user.is_authenticated():
                 response = 'You are already logged in as *{}* _({})_. Did you mean to /logout?'.format(user.full_name, user.matric)
                 send_message(user, response, markdown=True)
@@ -502,17 +549,9 @@ class MainPage(webapp2.RequestHandler):
 
             send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
 
-        elif is_command('logout'):
-            if not user.is_authenticated():
-                send_message(user, 'Did you mean to /login?')
-                return
-
-            user.set_authenticated(False)
-            send_message(user, 'You have successfully logged out. /login again?')
-
-        elif is_command('menu'):
-            if len(cmd) > 5:
-                date_arg = cmd[5:].strip()
+        elif is_command('checkmenu'):
+            if len(cmd) > 10:
+                date_arg = cmd[10:].strip()
                 today_date = parsedatetime.Calendar().parseDT(date_arg, datetime.utcnow() + timedelta(hours=8))[0].date()
             else:
                 today_date = (datetime.utcnow() + timedelta(hours=8)).date()
@@ -526,24 +565,58 @@ class MainPage(webapp2.RequestHandler):
             else:
                 send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day], markdown=True)
 
-        else:
+        elif is_command('settings'):
+            send_message(user, build_settings_list(), markdown=True)
+
+        elif is_command('weeklyoff'):
+            if not user.is_active_weekly():
+                send_message(user, 'Weekly meal reports are already off.')
+                return
+
+            user.set_active_weekly(False)
+            send_message(user, 'Success! You will no longer receive weekly meal reports.')
+
+        elif is_command('weeklyon'):
+            if user.is_active_weekly():
+                send_message(user, 'Weekly meal reports are already on.')
+                return
+
+            user.set_active_weekly(True)
+            send_message(user, 'Success! You will receive meal reports every Sunday night.')
+
+        elif is_command('dailyoff'):
+            if not user.is_active():
+                send_message(user, 'Daily menu updates are already off.')
+                return
+
+            user.set_active(False)
+            send_message(user, 'Success! You will no longer receive daily menu updates.')
+
+        elif is_command('dailyon'):
+            if user.is_active():
+                send_message(user, 'Daily menu updates are already on.')
+                return
+
+            user.set_active(True)
+            send_message(user, 'Success! You will receive menu updates every day at midnight.')
+
+        elif is_command('help'):
+            send_message(user, self.HELP.format(first_name) + build_command_list())
+
+        elif is_command('about'):
+            send_message(user, self.ABOUT, disable_web_page_preview=False)
+
+        elif is_command('logout'):
             if not user.is_authenticated():
                 send_message(user, 'Did you mean to /login?')
                 return
 
-            send_typing(uid)
-            xls_data = check_meals(user.jsessionid, get_excel=True)
-            meals = check_meals(user.jsessionid)
+            user.set_authenticated(False)
+            send_message(user, 'You have successfully logged out. /login again?')
 
-            if not xls_data or not meals:
-                send_message(user, self.REMOTE_ERROR.format(first_name))
-                return
-            elif xls_data == UNAUTHORISED or meals == UNAUTHORISED:
-                user.set_authenticated(False)
-                send_message(user, SESSION_EXPIRED.format(first_name))
-                return
-
-            send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
+        else:
+            logging.info(LOG_UNRECOGNISED)
+            send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
 
 class DailyPage(webapp2.RequestHandler):
     def run(self):

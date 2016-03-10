@@ -3,3 +3,11 @@ cron:
   url: /auth
   schedule: every 10 minutes synchronized
   timezone: Asia/Singapore
+- description: daily menu delivery
+  url: /daily
+  schedule: every day 00:00
+  timezone: Asia/Singapore
+- description: weekly meal report
+  url: /weekly
+  schedule: every sunday 21:35
+  timezone: Asia/Singapore
