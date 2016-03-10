@@ -10,8 +10,39 @@ from google.appengine.ext import db
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
+from secrets import TOKEN, ADMIN_ID
+TELEGRAM_URL = 'https://api.telegram.org/bot' + TOKEN
+TELEGRAM_URL_SEND = TELEGRAM_URL + '/sendMessage'
+TELEGRAM_URL_CHAT_ACTION = TELEGRAM_URL + '/sendChatAction'
+JSON_HEADER = {'Content-Type': 'application/json;charset=utf-8'}
+
 BASE_URL = 'https://myaces.nus.edu.sg/Prjhml/'
 UNAUTHORISED = 'empty'
+SESSION_EXPIRED = 'Sorry {}, your session has expired. Please /login again'
+
+LOG_SENT = '{} {} sent to uid {} ({})'
+LOG_AUTH = 'Authenticating with jsessionid '
+LOG_AUTH_SUCCESS = 'Successfully authenticated as {} ({})'
+LOG_ENQUEUED = 'Enqueued {} to uid {} ({})'
+LOG_DID_NOT_SEND = 'Did not send {} to uid {} ({}): {}'
+LOG_ERROR_SENDING = 'Error sending {} to uid {} ({}):\n{}'
+LOG_ERROR_DATASTORE = 'Error reading from datastore:\n'
+LOG_ERROR_REMOTE = 'Error accessing site:\n'
+LOG_ERROR_AUTH = 'Error sending auth request for uid {} ({})'
+LOG_TYPE_START_NEW = 'Type: Start (new user)'
+LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
+LOG_TYPE_NON_TEXT = 'Type: Non-text'
+LOG_TYPE_COMMAND = 'Type: Command\n'
+LOG_UNRECOGNISED = 'Unrecognised command'
+LOG_SESSION_ALIVE = 'User {} is still authenticated'
+LOG_SESSION_EXPIRED = 'Session expired for user {}'
+
+RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
+                     '[Error]: Bot was kicked from a chat',
+                     '[Error]: Bot was blocked by the user',
+                     '[Error]: Bad Request: chat not found',
+                     '[Error]: Forbidden: can\'t write to chat with deleted user',
+                     '[Error]: Forbidden: can\'t write to private chat with deleted user')
 
 def get_new_jsessionid():
     url = BASE_URL + 'login.do'
@@ -29,6 +60,7 @@ def get_new_jsessionid():
 
 def check_auth(jsessionid):
     url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
+    logging.info(LOG_AUTH + jsessionid)
 
     try:
         result = urlfetch.fetch(url, method=urlfetch.HEAD, follow_redirects=False, deadline=10)
@@ -40,6 +72,7 @@ def check_auth(jsessionid):
 
 def check_meals(jsessionid, first_time_user=None, get_excel=False):
     url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
+    logging.info(LOG_AUTH + jsessionid)
 
     try:
         result = urlfetch.fetch(url, follow_redirects=False, deadline=10)
@@ -69,19 +102,7 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
 
         return xls_result.content
 
-    def summarise(html):
-        data = ''.join(html.replace('/', '').replace('<td>', ' ')).split()
-        return 'Consumed: {}\nForfeited: {}\nCarried forward: {}\nTotal remaining: {}'.format(data[1], data[2], data[3], data[5])
-
-    start = html.find('<td class="fieldname" nowrap="true"> Breakfast </td>') + 75
-    end = html.find('</tr>', start)
-    breakfast = html[start:end]
-
-    start = html.find('<td class="fieldname" nowrap="true"> Dinner </td>') + 72
-    end = html.find('</tr>', start)
-    dinner = html[start:end]
-
-    if first_time_user:
+    elif first_time_user:
         start = html.find('<td colspan="3">') + 16
         end = html.find('</td>', start)
         full_name = html[start:end].replace('&nbsp;', ' ').strip()
@@ -99,12 +120,22 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
         first_time_user.meal_pref = meal_pref
         first_time_user.put()
 
-        intro = 'Success! You are logged in as *{}* _({})_.\n\n'.format(full_name, matric)
+        logging.info(LOG_AUTH_SUCCESS.format(full_name, matric))
+        return 'Success! You are logged in as *{}* _({})_.\n\n'.format(full_name, matric)
 
-    else:
-        intro = ''
+    def summarise(html):
+        data = ''.join(html.replace('/', '').replace('<td>', ' ')).split()
+        return 'Consumed: {}\nForfeited: {}\nCarried forward: {}\nTotal remaining: {}'.format(data[1], data[2], data[3], data[5])
 
-    return intro + '*Breakfast*\n' + summarise(breakfast) + '\n\n*Dinner*\n' + summarise(dinner)
+    start = html.find('<td class="fieldname" nowrap="true"> Breakfast </td>') + 75
+    end = html.find('</tr>', start)
+    breakfast = html[start:end]
+
+    start = html.find('<td class="fieldname" nowrap="true"> Dinner </td>') + 72
+    end = html.find('</tr>', start)
+    dinner = html[start:end]
+
+    return '*Breakfast*\n' + summarise(breakfast) + '\n\n*Dinner*\n' + summarise(dinner)
 
 def weekly_summary(xls_data):
     def describe(number_of_meals, meal_type):
@@ -136,34 +167,7 @@ def weekly_summary(xls_data):
     breakfast_description = describe(breakfasts, 'breakfast')
     dinner_description = describe(dinners, 'dinner')
 
-    return 'You had {} ({} and {}) this week!'.format(overall_description, breakfast_description, dinner_description)
-
-from secrets import TOKEN, ADMIN_ID
-TELEGRAM_URL = 'https://api.telegram.org/bot' + TOKEN
-TELEGRAM_URL_SEND = TELEGRAM_URL + '/sendMessage'
-TELEGRAM_URL_CHAT_ACTION = TELEGRAM_URL + '/sendChatAction'
-JSON_HEADER = {'Content-Type': 'application/json;charset=utf-8'}
-
-LOG_SENT = '{} {} sent to uid {} ({})'
-LOG_ENQUEUED = 'Enqueued {} to uid {} ({})'
-LOG_DID_NOT_SEND = 'Did not send {} to uid {} ({}): {}'
-LOG_ERROR_SENDING = 'Error sending {} to uid {} ({}):\n{}'
-LOG_ERROR_DATASTORE = 'Error reading from datastore:\n'
-LOG_ERROR_REMOTE = 'Error accessing site:\n'
-LOG_TYPE_START_NEW = 'Type: Start (new user)'
-LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
-LOG_TYPE_NON_TEXT = 'Type: Non-text'
-LOG_TYPE_COMMAND = 'Type: Command\n'
-LOG_UNRECOGNISED = 'Unrecognised command'
-LOG_SESSION_ALIVE = 'User {} is still authenticated'
-LOG_SESSION_EXPIRED = 'Session expired for user {}'
-
-RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
-                     '[Error]: Bot was kicked from a chat',
-                     '[Error]: Bot was blocked by the user',
-                     '[Error]: Bad Request: chat not found',
-                     '[Error]: Forbidden: can\'t write to chat with deleted user',
-                     '[Error]: Forbidden: can\'t write to private chat with deleted user')
+    return '{} ({} and {})'.format(overall_description, breakfast_description, dinner_description)
 
 def telegram_post(data, deadline=3):
     return urlfetch.fetch(url=TELEGRAM_URL_SEND, payload=data, method=urlfetch.POST,
@@ -182,7 +186,9 @@ class User(db.Model):
     last_received = db.DateTimeProperty(auto_now_add=True, indexed=False)
     last_sent = db.DateTimeProperty(indexed=False)
     last_auto = db.DateTimeProperty(auto_now_add=True)
+    last_weekly = db.DateTimeProperty(auto_now_add=True)
     active = db.BooleanProperty(default=True)
+    active_weekly = db.BooleanProperty(default=True)
 
     jsessionid = db.StringProperty(indexed=False)
     auth = db.BooleanProperty(default=False)
@@ -193,6 +199,9 @@ class User(db.Model):
 
     def get_uid(self):
         return self.key().name()
+
+    def get_first_name(self):
+        return self.first_name.encode('utf-8', 'ignore').strip()
 
     def get_name_string(self):
         def prep(string):
@@ -209,11 +218,18 @@ class User(db.Model):
     def is_active(self):
         return self.active
 
+    def is_active_weekly(self):
+        return self.active_weekly
+
     def is_authenticated(self):
         return self.auth
 
     def set_active(self, active):
         self.active = active
+        self.put()
+
+    def set_active_weekly(self, active_weekly):
+        self.active_weekly = active_weekly
         self.put()
 
     def set_authenticated(self, auth):
@@ -236,6 +252,10 @@ class User(db.Model):
 
     def update_last_auto(self):
         self.last_auto = get_today_time()
+        self.put()
+
+    def update_last_weekly(self):
+        self.last_weekly = get_today_time()
         self.put()
 
 class Data(db.Model):
@@ -303,9 +323,11 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
             taskqueue.add(url='/message', payload=payload, countdown=countdown)
             logging.info(LOG_ENQUEUED.format(msg_type, uid, user.get_name_string()))
 
-        if msg_type in ('daily', 'mass'):
+        if msg_type in ('daily', 'weekly', 'mass'):
             if msg_type == 'daily':
                 user.update_last_auto()
+            elif msg_type == 'weekly':
+                user.update_last_weekly()
 
             queue_message()
             return
@@ -355,6 +377,7 @@ def handle_response(response, user, uid, msg_type):
                                              error_description))
 
         user.set_active(False)
+        user.set_active_weekly(False)
         if msg_type == 'promo':
             user.set_promo(False)
 
@@ -370,6 +393,9 @@ def send_typing(uid):
         return
 
 class MainPage(webapp2.RequestHandler):
+    REMOTE_ERROR = 'Sorry {}, I\'m having some difficulty accessing the site. ' + \
+                   'Please try again later.'
+
     def get(self):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('RCMealBot backend running...\n')
@@ -433,29 +459,29 @@ class MainPage(webapp2.RequestHandler):
             jsessionid = get_new_jsessionid()
 
             if not jsessionid:
-                send_message(user, 'Sorry, please try again later')
+                send_message(user, self.REMOTE_ERROR.format(first_name))
                 return
 
             url = BASE_URL + 'login.do;jsessionid=' + jsessionid
-            response = 'Login here: ' + url + '\n\nWhen done, click /continue'
+            response = 'Login here: ' + url + '\n\nWhen done, come back here and type /continue'
 
             user.set_jsessionid(jsessionid)
             send_message(user, response, disable_web_page_preview=True)
 
         elif is_command('continue'):
             if not user.jsessionid:
-                send_message(user, 'Sorry, please /login first')
+                send_message(user, 'Sorry {}, please /login first'.format(first_name))
                 return
 
             send_typing(uid)
-            meals = check_meals(user.jsessionid, first_time_user=user)
+            welcome = check_meals(user.jsessionid, first_time_user=user)
 
-            if not meals:
-                send_message(user, 'Sorry, please try again later')
+            if not welcome:
+                send_message(user, self.REMOTE_ERROR.format(first_name))
                 return
-            elif meals == UNAUTHORISED:
+            elif welcome == UNAUTHORISED:
                 user.set_authenticated(False)
-                response = 'Sorry, that didn\'t work. Please try /login again or, if the problem persists, read on:\n\n'
+                response = 'Sorry {}, that didn\'t work. Please try /login again or, if the problem persists, read on:\n\n'.format(first_name)
                 response += 'The link must be opened in a fresh browser that has never been used to browse the RC dining portal before. ' + \
                             'Try one of the following:\n'
                 response += '- open the link in a new incognito window\n'
@@ -465,7 +491,16 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             user.set_authenticated(True)
-            send_message(user, meals, markdown=True)
+            send_message(user, welcome, markdown=True)
+
+            send_typing(uid)
+            xls_data = check_meals(user.jsessionid, get_excel=True)
+            meals = check_meals(user.jsessionid)
+
+            if not xls_data or not meals or xls_data == UNAUTHORISED or meals == UNAUTHORISED:
+                return
+
+            send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
 
         elif is_command('logout'):
             if not user.is_authenticated():
@@ -474,25 +509,6 @@ class MainPage(webapp2.RequestHandler):
 
             user.set_authenticated(False)
             send_message(user, 'You have successfully logged out. /login again?')
-
-        elif is_command('summary'):
-            if not user.is_authenticated():
-                send_message(user, 'Please /login first')
-                return
-
-            send_typing(uid)
-            xls_data = check_meals(user.jsessionid, get_excel=True)
-            meals = check_meals(user.jsessionid)
-
-            if not xls_data or not meals:
-                send_message(user, 'Sorry, please try again later')
-                return
-            elif xls_data == UNAUTHORISED or meals == UNAUTHORISED:
-                user.set_authenticated(False)
-                send_message(user, 'Sorry, your session has expired. Please /login again')
-                return
-
-            send_message(user, '*Weekly Summary*\n' + weekly_summary(xls_data) + '\n\n' + meals, markdown=True)
 
         elif is_command('menu'):
             if len(cmd) > 5:
@@ -505,10 +521,10 @@ class MainPage(webapp2.RequestHandler):
             start_date = get_data().start_date
             day = (today_date - start_date).days
             friendly_date = today_date.strftime('%d %B %Y (%a)')
-            if day < 0 or day > max_day:
-                send_message(user, 'Sorry, OHS has not uploaded the menu for {} yet'.format(friendly_date))
+            if day < 0 or day >= max_day:
+                send_message(user, 'Sorry {}, OHS has not uploaded the menu for {} yet'.format(first_name, friendly_date))
             else:
-                send_message(user, 'Menu for {}\n\n'.format(friendly_date) + menus[day], markdown=True)
+                send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day], markdown=True)
 
         else:
             if not user.is_authenticated():
@@ -516,27 +532,38 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             send_typing(uid)
+            xls_data = check_meals(user.jsessionid, get_excel=True)
             meals = check_meals(user.jsessionid)
 
-            if not meals:
-                send_message(user, 'Sorry, please try again later')
+            if not xls_data or not meals:
+                send_message(user, self.REMOTE_ERROR.format(first_name))
                 return
-            elif meals == UNAUTHORISED:
+            elif xls_data == UNAUTHORISED or meals == UNAUTHORISED:
                 user.set_authenticated(False)
-                send_message(user, 'Sorry, your session has expired. Please /login again')
+                send_message(user, SESSION_EXPIRED.format(first_name))
                 return
 
-            send_message(user, meals, markdown=True)
+            send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
 
-class SendPage(webapp2.RequestHandler):
+class DailyPage(webapp2.RequestHandler):
     def run(self):
+        today_date = (datetime.utcnow() + timedelta(hours=8)).date()
+        menus = ast.literal_eval(get_data().menus)
+        max_day = len(menus)
+        start_date = get_data().start_date
+        day = (today_date - start_date).days
+        friendly_date = today_date.strftime('%d %B %Y (%a)')
+        if day < 0 or day >= max_day:
+            return True
+        menu = 'Menu for {}:\n\n'.format(friendly_date) + menus[day]
+
         query = User.all()
         query.filter('active =', True)
         query.filter('last_auto <', get_today_time())
 
         try:
             for user in query.run(batch_size=500):
-                send_message(user, 'devo', msg_type='daily', markdown=True)
+                send_message(user, menu, msg_type='daily', markdown=True)
         except db.Error as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
@@ -545,7 +572,43 @@ class SendPage(webapp2.RequestHandler):
 
     def get(self):
         if self.run() == False:
-            taskqueue.add(url='/send')
+            taskqueue.add(url='/daily')
+
+    def post(self):
+        if self.run() == False:
+            self.abort(502)
+
+class WeeklyPage(webapp2.RequestHandler):
+    def run(self):
+        query = User.all()
+        query.filter('auth =', True)
+        query.filter('active_weekly =', True)
+        query.filter('last_weekly <', get_today_time())
+
+        try:
+            for user in query.run(batch_size=500):
+
+                xls_data = check_meals(user.jsessionid, get_excel=True)
+                meals = check_meals(user.jsessionid)
+
+                if not xls_data or not meals:
+                    self.abort(502)
+                elif xls_data == UNAUTHORISED or meals == UNAUTHORISED:
+                    user.set_authenticated(False)
+                    send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
+                    continue
+
+                summary = '*Weekly Summary*\nYou had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals
+                send_message(user, summary, msg_type='weekly', markdown=True)
+        except db.Error as e:
+            logging.warning(LOG_ERROR_DATASTORE + str(e))
+            return False
+
+        return True
+
+    def get(self):
+        if self.run() == False:
+            taskqueue.add(url='/weekly')
 
     def post(self):
         if self.run() == False:
@@ -577,18 +640,23 @@ class AuthPage(webapp2.RequestHandler):
         query = User.all()
         query.filter('auth =', True)
 
+        def queue_reauth(user):
+            uid = user.get_uid()
+            taskqueue.add(url='/reauth', payload=uid)
+            logging.info(LOG_ENQUEUED.format('reauth', uid, user.get_name_string()))
+
         try:
             for user in query.run(batch_size=500):
                 result = check_auth(user.jsessionid)
                 if result:
                     logging.info(LOG_SESSION_ALIVE.format(user.get_name_string()))
                 elif result == None:
-                    # TODO: enqueue keepalive
-                    pass
+                    logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_name_string()))
+                    queue_reauth(user)
                 else:
                     logging.info(LOG_SESSION_EXPIRED.format(user.get_name_string()))
                     user.set_authenticated(False)
-                    send_message(user, 'Sorry, your session has expired. Please /login again')
+                    send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
         except db.Error as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
@@ -597,11 +665,27 @@ class AuthPage(webapp2.RequestHandler):
 
     def get(self):
         if self.run() == False:
-            taskqueue.add(url='/send')
+            taskqueue.add(url='/auth')
 
     def post(self):
         if self.run() == False:
             self.abort(502)
+
+class ReauthPage(webapp2.RequestHandler):
+    def post(self):
+        uid = self.request.body
+        user = get_user(uid)
+
+        result = check_auth(user.jsessionid)
+        if result:
+            logging.info(LOG_SESSION_ALIVE.format(user.get_name_string()))
+        elif result == None:
+            logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_name_string()))
+            self.abort(502)
+        else:
+            logging.info(LOG_SESSION_EXPIRED.format(user.get_name_string()))
+            user.set_authenticated(False)
+            send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
 
 class MenuPage(webapp2.RequestHandler):
     def get(self):
@@ -691,9 +775,11 @@ class MassPage(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/' + TOKEN, MainPage),
-    ('/send', SendPage),
+    ('/daily', DailyPage),
+    ('/weekly', WeeklyPage),
     ('/message', MessagePage),
     ('/auth', AuthPage),
+    ('/reauth', ReauthPage),
     ('/migrate', MigratePage),
     ('/mass', MassPage),
     ('/menu', MenuPage),
