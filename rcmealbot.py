@@ -513,7 +513,7 @@ class MainPage(webapp2.RequestHandler):
             response = 'Login here: ' + url + '\n\nWhen done, come back here and type /continue'
 
             user.set_jsessionid(jsessionid)
-            send_message(user, response, disable_web_page_preview=True)
+            send_message(user, response)
 
         elif is_command('continue'):
             if not user.jsessionid:
@@ -604,7 +604,7 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, self.HELP.format(first_name) + build_command_list())
 
         elif is_command('about'):
-            send_message(user, self.ABOUT, disable_web_page_preview=False)
+            send_message(user, self.ABOUT)
 
         elif is_command('logout'):
             if not user.is_authenticated():
