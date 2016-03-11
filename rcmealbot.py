@@ -412,7 +412,7 @@ class MainPage(webapp2.RequestHandler):
         def build_command_list():
             cmds = '/checkmeals - check meal credits' if user.is_authenticated() else '/login - to check meal credits'
             cmds += '\n/checkmenu - view today\'s menu'
-            cmds += '\n/checkmenu <date> - view the menu for a particular day'
+            cmds += '\n/checkmenu <date> (without <>) - view the menu for a particular day'
             cmds += '\n/settings - turn on/off automatic updates'
             cmds += '\n/about - about this bot'
             cmds += '\n/logout' if user.is_authenticated() else ''
@@ -540,8 +540,10 @@ class MainPage(webapp2.RequestHandler):
                 response = 'Sorry {}, that didn\'t work. Please try /login again or, if the problem persists, read on:\n\n'.format(first_name)
                 response += 'The link must be opened in a fresh browser that has never been used to browse the RC dining portal before. ' + \
                             'Try one of the following:\n'
-                response += '- open the link in a new incognito window\n'
-                response += '- clear the cookies in your current browser before opening the link\n'
+                response += '- copy and paste the link into a new incognito (Chrome) or private browsing (Safari) window\n'
+                response += '- clear the cookies/site data for myaces.nus.edu.sg in your current browser before opening the link:\n'
+                response += '-- Chrome app -> browse to myaces.nus.edu.sg -> tap the green lock -> Site Settings -> Clear & Reset\n'
+                response += '-- Settings app -> Safari -> Advanced -> Website Data -> Edit -> delete entry for myaces.nus.edu.sg\n'
                 response += '- open the link with another browser (one you have never used to browse the RC dining portal before)\n'
                 send_message(user, response)
                 return
