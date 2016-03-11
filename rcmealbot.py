@@ -437,12 +437,19 @@ class MainPage(webapp2.RequestHandler):
         logging.debug(self.request.body)
 
         msg = data.get('message')
+        msg_chat = msg.get('chat')
         msg_from = msg.get('from')
 
-        uid = msg_from.get('id')
-        first_name = msg_from.get('first_name')
-        last_name = msg_from.get('last_name')
-        username = msg_from.get('username')
+        if msg_chat.get('type') == 'private':
+            uid = msg_from.get('id')
+            first_name = msg_from.get('first_name')
+            last_name = msg_from.get('last_name')
+            username = msg_from.get('username')
+        else:
+            uid = msg_chat.get('id')
+            first_name = msg_chat.get('title')
+            last_name = None
+            username = None
 
         user = update_profile(uid, username, first_name, last_name)
 
