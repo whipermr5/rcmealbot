@@ -22,6 +22,7 @@ SESSION_EXPIRED = 'Sorry {}, your session has expired. Please /login again'
 
 LOG_SENT = '{} {} sent to uid {} ({})'
 LOG_AUTH = 'Authenticating with jsessionid '
+LOG_AUTH_FAILED = 'Authentication failed for uid {} ({})'
 LOG_AUTH_SUCCESS = 'Successfully authenticated as {} ({})'
 LOG_ENQUEUED = 'Enqueued {} to uid {} ({})'
 LOG_DID_NOT_SEND = 'Did not send {} to uid {} ({}): {}'
@@ -528,6 +529,7 @@ class MainPage(webapp2.RequestHandler):
                 return
             elif welcome == UNAUTHORISED:
                 user.set_authenticated(False)
+                logging.info(LOG_AUTH_FAILED.format(uid, user.get_name_string()))
                 response = 'Sorry {}, that didn\'t work. Please try /login again or, if the problem persists, read on:\n\n'.format(first_name)
                 response += 'The link must be opened in a fresh browser that has never been used to browse the RC dining portal before. ' + \
                             'Try one of the following:\n'
