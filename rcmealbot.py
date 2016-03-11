@@ -116,7 +116,7 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
         end = html.find('</td>', start)
         meal_pref = html[start:end].replace('&nbsp;', ' ').strip()
 
-        first_time_user.full_name = full_name
+        first_time_user.full_name = BeautifulSoup(full_name, 'lxml').text
         first_time_user.matric = matric
         first_time_user.meal_pref = meal_pref
         first_time_user.put()
