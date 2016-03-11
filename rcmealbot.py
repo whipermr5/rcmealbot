@@ -126,7 +126,18 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
 
     def summarise(html):
         data = ''.join(html.replace('/', '').replace('<td>', ' ')).split()
-        return 'Consumed: {}\nForfeited: {}\nCarried forward: {}\nTotal remaining: {}'.format(data[1], data[2], data[3], data[5])
+        d1 = ''
+        d2 = ''
+        d3 = ''
+        d4 = ''
+        try:
+            d1 = data[1]
+            d2 = data[2]
+            d3 = data[3]
+            d4 = data[5]
+        except IndexError:
+            pass
+        return 'Consumed: {}\nForfeited: {}\nCarried forward: {}\nTotal remaining: {}'.format(d1, d2, d3, d4)
 
     start = html.find('<td class="fieldname" nowrap="true"> Breakfast </td>') + 75
     end = html.find('</tr>', start)
@@ -151,7 +162,10 @@ def weekly_summary(xls_data):
     breakfasts = 0
     dinners = 0
 
-    sh = xlrd.open_workbook(file_contents=xls_data).sheet_by_index(0)
+    try:
+        sh = xlrd.open_workbook(file_contents=xls_data).sheet_by_index(0)
+    except:
+        return ''
     for i in range(1, sh.nrows):
         date = datetime.strptime(sh.row(i)[1].value, '%d/%m/%Y %H:%M:%S')
         week = date.strftime('%Y-W%W')
