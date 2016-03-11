@@ -42,8 +42,15 @@ RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
                      '[Error]: Bot was kicked from a chat',
                      '[Error]: Bot was blocked by the user',
                      '[Error]: Bad Request: chat not found',
+                     '[Error]: Bad Request: group is deactivated',
+                     '[Error]: Bad Request: group chat is deactivated',
+                     '[Error]: Forbidden: bot was kicked from the group chat',
+                     '[Error]: Forbidden: bot was kicked from the channel chat',
+                     '[Error]: Forbidden: bot was kicked from the supergroup chat',
                      '[Error]: Forbidden: can\'t write to chat with deleted user',
-                     '[Error]: Forbidden: can\'t write to private chat with deleted user')
+                     '[Error]: Forbidden: can\'t write to private chat with deleted user',
+                     '[Error]: Forbidden: bot is not a participant of the channel chat',
+                     '[Error]: Forbidden: bot is not a participant of the supergroup chat')
 
 def get_new_jsessionid():
     url = BASE_URL + 'login.do'
@@ -588,7 +595,7 @@ class MainPage(webapp2.RequestHandler):
             if day < 0 or day >= max_day:
                 send_message(user, 'Sorry {}, OHS has not uploaded the menu for {} yet'.format(first_name, friendly_date))
             else:
-                send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day], markdown=True)
+                send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day] + '\n\n(taken from OHS website; may not be accurate)', markdown=True)
 
         elif is_command('settings'):
             send_message(user, build_settings_list(), markdown=True)
@@ -653,7 +660,7 @@ class DailyPage(webapp2.RequestHandler):
         friendly_date = today_date.strftime('%d %B %Y (%a)')
         if day < 0 or day >= max_day:
             return True
-        menu = 'Menu for {}:\n\n'.format(friendly_date) + menus[day]
+        menu = 'Menu for {}:\n\n'.format(friendly_date) + menus[day] + '\n\n(use /dailyoff to unsubscribe)'
 
         query = User.all()
         query.filter('active =', True)
