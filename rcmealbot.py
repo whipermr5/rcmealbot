@@ -176,7 +176,7 @@ def weekly_summary(xls_data):
     for i in range(1, sh.nrows):
         date = datetime.strptime(sh.row(i)[1].value, '%d/%m/%Y %H:%M:%S')
         week = date.strftime('%Y-W%W')
-        this_week = get_today_time().strftime('%Y-W%W')
+        this_week = get_today_date().strftime('%Y-W%W')
         if week != this_week:
             break
         meal_type = sh.row(i)[2].value
@@ -195,8 +195,11 @@ def telegram_post(data, deadline=3):
     return urlfetch.fetch(url=TELEGRAM_URL_SEND, payload=data, method=urlfetch.POST,
                           headers=JSON_HEADER, deadline=deadline)
 
+def get_today_date():
+    return (datetime.utcnow() + timedelta(hours=8)).date()
+
 def get_today_time():
-    today = (datetime.utcnow() + timedelta(hours=8)).date()
+    today = get_today_date()
     today_time = datetime(today.year, today.month, today.day) - timedelta(hours=8)
     return today_time
 
@@ -587,7 +590,7 @@ class MainPage(webapp2.RequestHandler):
                 date_arg = cmd[10:].strip()
                 today_date = parsedatetime.Calendar().parseDT(date_arg, datetime.utcnow() + timedelta(hours=8))[0].date()
             else:
-                today_date = (datetime.utcnow() + timedelta(hours=8)).date()
+                today_date = get_today_date()
             menus = ast.literal_eval(get_data().menus)
             max_day = len(menus)
             start_date = get_data().start_date
@@ -653,7 +656,7 @@ class MainPage(webapp2.RequestHandler):
 
 class DailyPage(webapp2.RequestHandler):
     def run(self):
-        today_date = (datetime.utcnow() + timedelta(hours=8)).date()
+        today_date = get_today_date()
         menus = ast.literal_eval(get_data().menus)
         max_day = len(menus)
         start_date = get_data().start_date
