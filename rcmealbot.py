@@ -595,7 +595,7 @@ class MainPage(webapp2.RequestHandler):
             if day < 0 or day >= max_day:
                 send_message(user, 'Sorry {}, OHS has not uploaded the menu for {} yet'.format(first_name, friendly_date))
             else:
-                send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day] + '\n\n(taken from OHS website; may not be accurate)', markdown=True)
+                send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day] + '\n\n(taken from OHS website)', markdown=True)
 
         elif is_command('settings'):
             send_message(user, build_settings_list(), markdown=True)
@@ -877,6 +877,16 @@ class MassPage(webapp2.RequestHandler):
         taskqueue.add(url='/mass')
 
     def post(self):
+        # try:
+        #     one_hour_ago = datetime.now() - timedelta(hours=1)
+        #     query = User.all()
+        #     query.filter('created <', one_hour_ago)
+        #     for user in query.run(batch_size=500):
+        #         mass_msg = '*Update*\n\nOHS has updated the food menu so it should be accurate now! Enjoy :)\n\n- rcmealbot admin'
+        #         send_message(user, mass_msg, msg_type='mass', markdown=True)
+
+        # except Exception as e:
+        #     logging.error(e)
         pass
 
 app = webapp2.WSGIApplication([
