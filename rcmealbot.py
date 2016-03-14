@@ -794,6 +794,9 @@ class ReauthPage(webapp2.RequestHandler):
 
 class MenuPage(webapp2.RequestHandler):
     def get(self):
+        self.response.headers['Content-Type'] = 'text/plain'
+        self.response.write('Submitted update request')
+
         url = 'http://nus.edu.sg/ohs/current-residents/students/dining-daily.php'
         try:
             result = urlfetch.fetch(url, deadline=10)
@@ -833,7 +836,7 @@ class MenuPage(webapp2.RequestHandler):
                 text = u'\U0001F32E' + ' *Breakfast*'
             else:
                 text = u'\U0001F35C' + ' *Dinner*'
-            tag.string = text + '\n'
+            tag.string = '\n' + text + '\n'
 
         for tag in soup.select('tr'):
             text = tag.text.strip()
@@ -862,8 +865,7 @@ class MenuPage(webapp2.RequestHandler):
         data.menus = str(menus)
         data.start_date = start_date
         data.put()
-        self.response.headers['Content-Type'] = 'text/plain'
-        self.response.write('Done updating menu starting from {} for {} days:\n'.format(start_date_text, days) + get_data().menus)
+        logging.info('Done updating menu starting from {} for {} days:\n'.format(start_date_text, days) + get_data().menus)
 
 class MigratePage(webapp2.RequestHandler):
     def get(self):
