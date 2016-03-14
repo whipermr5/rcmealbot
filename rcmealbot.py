@@ -433,10 +433,11 @@ class MainPage(webapp2.RequestHandler):
         def build_command_list():
             cmds = '/checkmeals - check meal credits' if user.is_authenticated() else '/login - to check meal credits'
             cmds += '\n/checkmenu - view today\'s menu'
-            cmds += '\n/checkmenu <date> (without <>) - view the menu for a particular day'
             cmds += '\n/settings - turn on/off automatic updates'
-            cmds += '\n/about - about this bot'
+            cmds += '\n/about - about this bot/ send feedback'
             cmds += '\n/logout' if user.is_authenticated() else ''
+            cmds += '\n\n/checkmenu <date> - view the menu for a particular day'
+            cmds += '\n(Note: leave out the <>, e.g. /checkmenu 1 apr 2016. You can also use natural language for the date e.g. /checkmenu tomorrow, /checkmenu two days from now)'
             return cmds
 
         def build_settings_list():
