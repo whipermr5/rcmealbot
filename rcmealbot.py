@@ -60,7 +60,7 @@ def get_new_jsessionid():
 
     try:
         result = urlfetch.fetch(url, deadline=10)
-    except urlfetch_errors.Error as e:
+    except Exception as e:
         logging.warning(LOG_ERROR_REMOTE + str(e))
         return None
 
@@ -75,7 +75,7 @@ def check_auth(jsessionid):
 
     try:
         result = urlfetch.fetch(url, method=urlfetch.HEAD, follow_redirects=False, deadline=10)
-    except urlfetch_errors.Error as e:
+    except Exception as e:
         logging.warning(LOG_ERROR_REMOTE + str(e))
         return None
 
@@ -87,7 +87,7 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
 
     try:
         result = urlfetch.fetch(url, follow_redirects=False, deadline=10)
-    except urlfetch_errors.Error as e:
+    except Exception as e:
         logging.warning(LOG_ERROR_REMOTE + str(e))
         return None
 
@@ -104,7 +104,7 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
 
         try:
             xls_result = urlfetch.fetch(xls_url, follow_redirects=False, deadline=10)
-        except urlfetch_errors.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_REMOTE + str(e))
             return None
 
@@ -377,7 +377,7 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
 
         try:
             result = telegram_post(data)
-        except urlfetch_errors.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_description(), str(e)))
             queue_message()
             return
@@ -437,7 +437,7 @@ def send_typing(uid):
         rpc = urlfetch.create_rpc()
         urlfetch.make_fetch_call(rpc, url=TELEGRAM_URL_CHAT_ACTION, payload=data,
                                  method=urlfetch.POST, headers=JSON_HEADER)
-    except urlfetch_errors.Error:
+    except:
         return
 
 class MainPage(webapp2.RequestHandler):
@@ -717,7 +717,7 @@ class DailyPage(webapp2.RequestHandler):
         try:
             for user in query.run(batch_size=500):
                 send_message(user, menu, msg_type='daily', markdown=True)
-        except db.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
 
@@ -753,7 +753,7 @@ class WeeklyPage(webapp2.RequestHandler):
 
                 summary = '*Weekly Summary*\nYou had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals
                 send_message(user, summary, msg_type='weekly', markdown=True)
-        except db.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
 
@@ -777,7 +777,7 @@ class MessagePage(webapp2.RequestHandler):
 
         try:
             result = telegram_post(data, 4)
-        except urlfetch_errors.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_description(), str(e)))
             logging.debug(data)
             self.abort(502)
@@ -810,7 +810,7 @@ class AuthPage(webapp2.RequestHandler):
                     logging.info(LOG_SESSION_EXPIRED.format(user.get_description()))
                     user.set_authenticated(False)
                     send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
-        except db.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
 
@@ -848,8 +848,10 @@ class MenuPage(webapp2.RequestHandler):
         url = 'http://nus.edu.sg/ohs/current-residents/students/dining-daily.php'
         try:
             result = urlfetch.fetch(url, deadline=10)
-        except urlfetch_errors.Error as e:
+        except Exception as e:
             logging.warning(LOG_ERROR_REMOTE + str(e))
+            return
+
         html = result.content
         soup = BeautifulSoup(html, 'lxml')
 
