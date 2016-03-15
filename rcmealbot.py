@@ -35,9 +35,11 @@ LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
 LOG_TYPE_NON_TEXT = 'Type: Non-text'
 LOG_TYPE_COMMAND = 'Type: Command\n'
 LOG_UNRECOGNISED = 'Unrecognised command'
+LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
 LOG_SESSION_ALIVE = 'User {} is still authenticated'
 LOG_SESSION_EXPIRED = 'Session expired for user {}'
 
+RECOGNISED_ERROR_MIGRATE = '[Error]: Bad Request: group chat is migrated to supergroup chat'
 RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
                      '[Error]: Bot was kicked from a chat',
                      '[Error]: Bot was blocked by the user',
@@ -50,7 +52,8 @@ RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
                      '[Error]: Forbidden: can\'t write to chat with deleted user',
                      '[Error]: Forbidden: can\'t write to private chat with deleted user',
                      '[Error]: Forbidden: bot is not a participant of the channel chat',
-                     '[Error]: Forbidden: bot is not a participant of the supergroup chat')
+                     '[Error]: Forbidden: bot is not a participant of the supergroup chat',
+                     RECOGNISED_ERROR_MIGRATE)
 
 def get_new_jsessionid():
     url = BASE_URL + 'login.do'
@@ -240,6 +243,13 @@ class User(db.Model):
 
         return name
 
+    def get_description(self):
+        user_type = 'group' if self.is_group() else 'user'
+        return user_type + ' ' + self.get_name_string()
+
+    def is_group(self):
+        return int(self.get_uid()) < 0
+
     def is_active(self):
         return self.active
 
@@ -282,6 +292,14 @@ class User(db.Model):
     def update_last_weekly(self):
         self.last_weekly = get_today_time()
         self.put()
+
+    def migrate_to(self, uid):
+        props = dict((prop, getattr(self, prop)) for prop in self.properties().keys())
+        props.update(key_name=str(uid))
+        new_user = User(**props)
+        new_user.put()
+        self.delete()
+        return new_user
 
 class Data(db.Model):
     menus = db.TextProperty()
@@ -346,7 +364,7 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
                 'data': data
             })
             taskqueue.add(url='/message', payload=payload, countdown=countdown)
-            logging.info(LOG_ENQUEUED.format(msg_type, uid, user.get_name_string()))
+            logging.info(LOG_ENQUEUED.format(msg_type, uid, user.get_description()))
 
         if msg_type in ('daily', 'weekly', 'mass'):
             if msg_type == 'daily':
@@ -360,7 +378,7 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
         try:
             result = telegram_post(data)
         except urlfetch_errors.Error as e:
-            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_name_string(), str(e)))
+            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_description(), str(e)))
             queue_message()
             return
 
@@ -388,18 +406,23 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
 def handle_response(response, user, uid, msg_type):
     if response.get('ok') == True:
         msg_id = str(response.get('result').get('message_id'))
-        logging.info(LOG_SENT.format(msg_type.capitalize(), msg_id, uid, user.get_name_string()))
+        logging.info(LOG_SENT.format(msg_type.capitalize(), msg_id, uid, user.get_description()))
         user.update_last_sent()
 
     else:
         error_description = str(response.get('description'))
         if error_description not in RECOGNISED_ERRORS:
-            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_name_string(),
+            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_description(),
                                                      error_description))
             return False
 
-        logging.info(LOG_DID_NOT_SEND.format(msg_type, uid, user.get_name_string(),
+        logging.info(LOG_DID_NOT_SEND.format(msg_type, uid, user.get_description(),
                                              error_description))
+        if error_description == RECOGNISED_ERROR_MIGRATE:
+            new_uid = response.get('parameters', {}).get('migrate_to_chat_id')
+            if new_uid:
+                user = user.migrate_to(new_uid)
+                logging.info(LOG_USER_MIGRATED.format(uid, new_uid, user.get_description()))
 
         user.set_active(False)
         user.set_active_weekly(False)
@@ -487,6 +510,18 @@ class MainPage(webapp2.RequestHandler):
         if text:
             text = text.encode('utf-8', 'ignore')
 
+        def get_from_string():
+            name_string = msg_from.get('first_name').encode('utf-8', 'ignore').strip()
+            actual_last_name = msg_from.get('last_name')
+            actual_username = msg_from.get('username')
+            if actual_last_name:
+                actual_last_name = actual_last_name.encode('utf-8', 'ignore').strip()
+                name_string += ' ' + actual_last_name
+            if actual_username:
+                actual_username = actual_username.encode('utf-8', 'ignore').strip()
+                name_string += ' @' + actual_username
+            return name_string
+
         if user.last_sent == None or text == '/start':
             if user.last_sent == None:
                 logging.info(LOG_TYPE_START_NEW)
@@ -498,12 +533,21 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, self.WELCOME.format(first_name) + build_command_list())
 
             if new_user:
-                send_message(ADMIN_ID, 'New user: ' + user.get_name_string())
+                if user.is_group():
+                    new_alert = 'New group: "{}" via user: {}'.format(first_name, get_from_string())
+                else:
+                    new_alert = 'New user: ' + get_from_string()
+                send_message(ADMIN_ID, new_alert)
 
             return
 
         if text == None:
             logging.info(LOG_TYPE_NON_TEXT)
+            migrate_to_chat_id = msg.get('migrate_to_chat_id')
+            if migrate_to_chat_id:
+                new_uid = migrate_to_chat_id
+                user = user.migrate_to(new_uid)
+                logging.info(LOG_USER_MIGRATED.format(uid, new_uid, user.get_description()))
             return
 
         logging.info(LOG_TYPE_COMMAND + text)
@@ -561,7 +605,7 @@ class MainPage(webapp2.RequestHandler):
                 return
             elif welcome == UNAUTHORISED:
                 user.set_authenticated(False)
-                logging.info(LOG_AUTH_FAILED.format(uid, user.get_name_string()))
+                logging.info(LOG_AUTH_FAILED.format(uid, user.get_description()))
                 response = 'Sorry {}, that didn\'t work. Please try /login again or, if the problem persists, read on:\n\n'.format(first_name)
                 response += 'The link must be opened in a fresh browser that has never been used to browse the RC dining portal before. ' + \
                             'Try one of the following:\n'
@@ -734,7 +778,7 @@ class MessagePage(webapp2.RequestHandler):
         try:
             result = telegram_post(data, 4)
         except urlfetch_errors.Error as e:
-            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_name_string(), str(e)))
+            logging.warning(LOG_ERROR_SENDING.format(msg_type, uid, user.get_description(), str(e)))
             logging.debug(data)
             self.abort(502)
 
@@ -752,18 +796,18 @@ class AuthPage(webapp2.RequestHandler):
         def queue_reauth(user):
             uid = user.get_uid()
             taskqueue.add(url='/reauth', payload=uid)
-            logging.info(LOG_ENQUEUED.format('reauth', uid, user.get_name_string()))
+            logging.info(LOG_ENQUEUED.format('reauth', uid, user.get_description()))
 
         try:
             for user in query.run(batch_size=500):
                 result = check_auth(user.jsessionid)
                 if result:
-                    logging.info(LOG_SESSION_ALIVE.format(user.get_name_string()))
+                    logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
                 elif result == None:
-                    logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_name_string()))
+                    logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
                     queue_reauth(user)
                 else:
-                    logging.info(LOG_SESSION_EXPIRED.format(user.get_name_string()))
+                    logging.info(LOG_SESSION_EXPIRED.format(user.get_description()))
                     user.set_authenticated(False)
                     send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
         except db.Error as e:
@@ -787,12 +831,12 @@ class ReauthPage(webapp2.RequestHandler):
 
         result = check_auth(user.jsessionid)
         if result:
-            logging.info(LOG_SESSION_ALIVE.format(user.get_name_string()))
+            logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
         elif result == None:
-            logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_name_string()))
+            logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
             self.abort(502)
         else:
-            logging.info(LOG_SESSION_EXPIRED.format(user.get_name_string()))
+            logging.info(LOG_SESSION_EXPIRED.format(user.get_description()))
             user.set_authenticated(False)
             send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
 
