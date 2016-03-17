@@ -5,7 +5,7 @@ import textwrap
 import xlrd
 import ast
 import parsedatetime
-from google.appengine.api import urlfetch, urlfetch_errors, taskqueue
+from google.appengine.api import urlfetch, taskqueue
 from google.appengine.ext import db
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
@@ -18,7 +18,12 @@ JSON_HEADER = {'Content-Type': 'application/json;charset=utf-8'}
 
 BASE_URL = 'https://myaces.nus.edu.sg/Prjhml/'
 UNAUTHORISED = 'empty'
-SESSION_EXPIRED = 'Sorry {}, your session has expired. Please /login again'
+SESSION_EXPIRED = 'Sorry {}, your session has expired. Please /login again.'
+HEADING_BREAKFAST = u'\U0001F32E' + ' *Breakfast*'
+HEADING_DINNER = u'\U0001F35C' + ' *Dinner*'
+NOTE_FRUIT = '\n\n' + u'\U0001F34A' + ' _Fruits will be served at the counter_'
+NOTE_UNSUBSCRIBE = '\n\n(use /dailyoff to unsubscribe)'
+EMPTY = 'empty'
 
 LOG_SENT = '{} {} sent to uid {} ({})'
 LOG_AUTH = 'Authenticating with jsessionid '
@@ -194,9 +199,20 @@ def weekly_summary(xls_data):
 
     return '{} ({} and {})'.format(overall_description, breakfast_description, dinner_description)
 
-def telegram_post(data, deadline=3):
-    return urlfetch.fetch(url=TELEGRAM_URL_SEND, payload=data, method=urlfetch.POST,
-                          headers=JSON_HEADER, deadline=deadline)
+def get_menu(today_date, meal_type):
+    if meal_type == 'breakfast':
+        menus = ast.literal_eval(get_data().breakfasts)
+    else:
+        menus = ast.literal_eval(get_data().dinners)
+    day = (today_date - get_data().start_date).days
+    if day < 0 or day >= len(menus):
+        return EMPTY
+    menu = menus[day]
+    if not menu:
+        return None
+    friendly_date = today_date.strftime('%-d %b %Y (%A)')
+    heading = HEADING_BREAKFAST if meal_type == 'breakfast' else HEADING_DINNER
+    return heading + ' - _{}_\n\n{}'.format(friendly_date, menu) + NOTE_FRUIT
 
 def get_today_date():
     return (datetime.utcnow() + timedelta(hours=8)).date()
@@ -205,6 +221,10 @@ def get_today_time():
     today = get_today_date()
     today_time = datetime(today.year, today.month, today.day) - timedelta(hours=8)
     return today_time
+
+def parse_date(friendly):
+    now = datetime.utcnow() + timedelta(hours=8)
+    return parsedatetime.Calendar().parseDT(friendly, now)[0].date()
 
 class User(db.Model):
     username = db.StringProperty(indexed=False)
@@ -285,8 +305,8 @@ class User(db.Model):
         self.last_sent = datetime.now()
         self.put()
 
-    def update_last_auto(self):
-        self.last_auto = get_today_time()
+    def update_last_auto(self, hours=0):
+        self.last_auto = get_today_time() + timedelta(hours=hours)
         self.put()
 
     def update_last_weekly(self):
@@ -302,7 +322,8 @@ class User(db.Model):
         return new_user
 
 class Data(db.Model):
-    menus = db.TextProperty()
+    breakfasts = db.TextProperty()
+    dinners = db.TextProperty()
     start_date = db.DateProperty(indexed=False)
 
 def get_user(uid):
@@ -335,6 +356,10 @@ def update_profile(uid, uname, fname, lname):
         user.put()
         return user
 
+def telegram_post(data, deadline=3):
+    return urlfetch.fetch(url=TELEGRAM_URL_SEND, payload=data, method=urlfetch.POST,
+                          headers=JSON_HEADER, deadline=deadline)
+
 def send_message(user_or_uid, text, msg_type='message', force_reply=False, markdown=False, disable_web_page_preview=True):
     try:
         uid = str(user_or_uid.get_uid())
@@ -366,9 +391,11 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
             taskqueue.add(url='/message', payload=payload, countdown=countdown)
             logging.info(LOG_ENQUEUED.format(msg_type, uid, user.get_description()))
 
-        if msg_type in ('daily', 'weekly', 'mass'):
+        if msg_type in ('daily', 'daily2', 'weekly', 'mass'):
             if msg_type == 'daily':
                 user.update_last_auto()
+            elif msg_type == 'daily2':
+                user.update_last_auto(hours=16)
             elif msg_type == 'weekly':
                 user.update_last_weekly()
 
@@ -458,12 +485,13 @@ class MainPage(webapp2.RequestHandler):
     def post(self):
         def build_command_list():
             cmds = '/checkmeals - check meal credits' if user.is_authenticated() else '/login - to check meal credits'
-            cmds += '\n/checkmenu - view today\'s menu'
+            cmds += '\n/breakfast - view today\'s breakfast menu'
+            cmds += '\n/dinner - view today\'s dinner menu'
             cmds += '\n/settings - turn on/off automatic updates'
             cmds += '\n/about - about this bot/ send feedback'
             cmds += '\n/logout' if user.is_authenticated() else ''
-            cmds += '\n\n/checkmenu <date> - view the menu for a particular day'
-            cmds += '\n(Note: leave out the <>, e.g. /checkmenu 1 apr 2016. You can also use natural language for the date e.g. /checkmenu tomorrow, /checkmenu two days from now)'
+            cmds += '\n\n/breakfast (or /dinner) <day> - view the breakfast/dinner menu for a particular day'
+            cmds += '\ne.g. /breakfast tomorrow, /breakfast saturday, /dinner next tuesday'
             return cmds
 
         def build_settings_list():
@@ -473,7 +501,7 @@ class MainPage(webapp2.RequestHandler):
                 cmds += ' Weekly meal reports (sent on Sunday nights) are *' + ('on' if user.is_active_weekly() else 'off') + '*.'
             else:
                 cmds += ' You are *not* logged in.'
-            cmds += ' Daily menu updates (sent at midnight) are *' + ('on' if user.is_active() else 'off') + '*.\n\n'
+            cmds += ' Daily menu updates (sent at midnight and 4pm) are *' + ('on' if user.is_active() else 'off') + '*.\n\n'
             cmds += '/weeklyoff - turn off weekly meal reports' if user.is_active_weekly() else '/weeklyon - turn on weekly meal reports'
             cmds += '\n/dailyoff - turn off daily menu updates' if user.is_active() else '\n/dailyon - turn on daily menu updates'
             return cmds
@@ -594,7 +622,7 @@ class MainPage(webapp2.RequestHandler):
 
         elif is_command('continue'):
             if not user.jsessionid:
-                send_message(user, 'Sorry {}, please /login first'.format(first_name))
+                send_message(user, 'Sorry {}, please /login first.'.format(first_name))
                 return
 
             send_typing(uid)
@@ -629,21 +657,37 @@ class MainPage(webapp2.RequestHandler):
 
             send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
 
-        elif is_command('checkmenu'):
+        elif is_command('breakfast'):
             if len(cmd) > 10:
-                date_arg = cmd[10:].strip()
-                today_date = parsedatetime.Calendar().parseDT(date_arg, datetime.utcnow() + timedelta(hours=8))[0].date()
+                today_date = parse_date(cmd[10:].strip())
             else:
                 today_date = get_today_date()
-            menus = ast.literal_eval(get_data().menus)
-            max_day = len(menus)
-            start_date = get_data().start_date
-            day = (today_date - start_date).days
-            friendly_date = today_date.strftime('%d %B %Y (%a)')
-            if day < 0 or day >= max_day:
-                send_message(user, 'Sorry {}, OHS has not uploaded the menu for {} yet'.format(first_name, friendly_date))
+
+            breakfast = get_menu(today_date, meal_type='breakfast')
+            friendly_date = today_date.strftime('%-d %b %Y (%A)')
+
+            if breakfast == EMPTY:
+                send_message(user, 'Sorry {}, OHS has not uploaded the breakfast menu for {} yet.'.format(first_name, friendly_date))
+            elif not breakfast:
+                send_message(user, 'Sorry {}, breakfast is not served on {}.'.format(first_name, friendly_date))
             else:
-                send_message(user, 'Menu for {}:\n\n'.format(friendly_date) + menus[day] + '\n\n(taken from OHS website)', markdown=True)
+                send_message(user, breakfast, markdown=True)
+
+        elif is_command('dinner'):
+            if len(cmd) > 7:
+                today_date = parse_date(cmd[7:].strip())
+            else:
+                today_date = get_today_date()
+
+            dinner = get_menu(today_date, meal_type='dinner')
+            friendly_date = today_date.strftime('%-d %b %Y (%A)')
+
+            if dinner == EMPTY:
+                send_message(user, 'Sorry {}, OHS has not uploaded the dinner menu for {} yet.'.format(first_name, friendly_date))
+            elif not dinner:
+                send_message(user, 'Sorry {}, dinner is not served on {}.'.format(first_name, friendly_date))
+            else:
+                send_message(user, dinner, markdown=True)
 
         elif is_command('settings'):
             send_message(user, build_settings_list(), markdown=True)
@@ -678,7 +722,7 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             user.set_active(True)
-            send_message(user, 'Success! You will receive menu updates every day at midnight.')
+            send_message(user, 'Success! You will receive menu updates every day at midnight and 4pm.')
 
         elif is_command('help'):
             send_message(user, self.HELP.format(first_name) + build_command_list())
@@ -699,24 +743,29 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
 
 class DailyPage(webapp2.RequestHandler):
-    def run(self):
-        today_date = get_today_date()
-        menus = ast.literal_eval(get_data().menus)
-        max_day = len(menus)
-        start_date = get_data().start_date
-        day = (today_date - start_date).days
-        friendly_date = today_date.strftime('%d %B %Y (%a)')
-        if day < 0 or day >= max_day:
+    def run(self, meal_type):
+        menu = get_menu(get_today_date(), meal_type=meal_type)
+        if not menu or menu == EMPTY:
             return True
-        menu = 'Menu for {}:\n\n'.format(friendly_date) + menus[day] + '\n\n(use /dailyoff to unsubscribe)'
+
+        menu += NOTE_UNSUBSCRIBE
+
+        if meal_type == 'breakfast':
+            msg_type = 'daily'
+            hours = 0
+        else:
+            msg_type = 'daily2'
+            hours = 16
+
+        expected_time_after_update = get_today_time() + timedelta(hours=hours)
 
         query = User.all()
         query.filter('active =', True)
-        query.filter('last_auto <', get_today_time())
+        query.filter('last_auto <', expected_time_after_update)
 
         try:
             for user in query.run(batch_size=500):
-                send_message(user, menu, msg_type='daily', markdown=True)
+                send_message(user, menu, msg_type=msg_type, markdown=True)
         except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
@@ -724,11 +773,13 @@ class DailyPage(webapp2.RequestHandler):
         return True
 
     def get(self):
-        if self.run() == False:
-            taskqueue.add(url='/daily')
+        meal_type = self.request.get('meal_type', 'breakfast')
+        if self.run(meal_type) == False:
+            taskqueue.add(url='/daily', payload=meal_type)
 
     def post(self):
-        if self.run() == False:
+        meal_type = self.request.body
+        if self.run(meal_type) == False:
             self.abort(502)
 
 class WeeklyPage(webapp2.RequestHandler):
@@ -855,13 +906,6 @@ class MenuPage(webapp2.RequestHandler):
         html = result.content
         soup = BeautifulSoup(html, 'lxml')
 
-        for tag in soup.select('.menu-selector'):
-            tag.decompose()
-
-        for tag in soup.select('.menu-legend'):
-            tag.name = 'span'
-            tag.string = '\n'
-
         for tag in soup.select('.td-cat img'):
             text = tag.get('alt')
             if text == 'Description':
@@ -872,50 +916,45 @@ class MenuPage(webapp2.RequestHandler):
             tag.name = 'span'
             tag.string = '\n'
 
-        for tag in soup.select('p'):
-            text = tag.text.strip().replace('*', '')
-            tag.string = '\n' + u'\U0001F34A' + ' _' + text + '_\n'
-
         start_date_text = soup.select('.day-1 h4')[0].text
         idx = start_date_text.find('\n')
         start_date_text = start_date_text[:idx]
         start_date = datetime.strptime(start_date_text, "%d %b %Y").date()
 
         for tag in soup.select('h4'):
-            if 'breakfast' in tag.text.lower():
-                text = u'\U0001F32E' + ' *Breakfast*'
-            else:
-                text = u'\U0001F35C' + ' *Dinner*'
-            tag.string = '\n' + text + '\n'
+            tag.decompose()
 
         for tag in soup.select('tr'):
             text = tag.text.strip()
             tag.string = text + '\n'
 
         days = len(soup.select('.day-menu'))
-        menus = []
+        breakfasts = []
+        dinners = []
         for i in range(days):
-            menu = ''
-            for tag in soup(class_='day-' + str(i + 1)):
-                menu += tag.text.strip() + '\n'
-            menu = menu.replace('\n-\n', '\n\n').strip()
+            breakfast = ''
+            for tag in soup.select('.day-{} .menu-breakfast'.format(i + 1)):
+                breakfast += tag.text.strip() + '\n'
+            breakfast = breakfast.replace('\n-\n', '\n\n').lstrip('-').strip()
+            dinner = ''
+            for tag in soup.select('.day-{} .menu-dinner'.format(i + 1)):
+                dinner += tag.text.strip() + '\n'
+            dinner = dinner.replace('\n-\n', '\n\n').lstrip('-').strip()
             if i % 6 == 5:
-                dinner_start = menu.find(u'\U0001F35C' + ' *Dinner*')
-                fruit_start = menu.find('_')
-                fruit_end = menu.find('_', fruit_start + 1)
-                fruit = menu[fruit_start:fruit_end + 1]
-                breakfast = menu[:dinner_start] + fruit
-                dinner = menu[dinner_start:]
-                menus.append(breakfast)
-                menus.append(dinner)
+                breakfasts.append(breakfast)
+                breakfasts.append(None)
+                dinners.append(None)
+                dinners.append(dinner)
             else:
-                menus.append(menu)
-        days = len(menus)
+                breakfasts.append(breakfast)
+                dinners.append(dinner)
+        days = len(breakfasts)
         data = get_data()
-        data.menus = str(menus)
+        data.breakfasts = str(breakfasts)
+        data.dinners = str(dinners)
         data.start_date = start_date
         data.put()
-        logging.info('Done updating menu starting from {} for {} days:\n'.format(start_date_text, days) + get_data().menus)
+        logging.info('Updated menu from {} for {} days:\n\n{}\n\n{}'.format(start_date_text, days, get_data().breakfasts, get_data().dinners))
 
 class MigratePage(webapp2.RequestHandler):
     def get(self):
