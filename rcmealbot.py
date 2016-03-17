@@ -967,11 +967,17 @@ class MassPage(webapp2.RequestHandler):
 
     def post(self):
         # try:
-        #     one_hour_ago = datetime.now() - timedelta(hours=1)
+        #     # one_hour_ago = datetime.now() - timedelta(hours=1)
         #     query = User.all()
-        #     query.filter('created <', one_hour_ago)
+        #     # query.filter('created <', one_hour_ago)
         #     for user in query.run(batch_size=500):
-        #         mass_msg = '*Update*\n\nOHS has updated the food menu so it should be accurate now! Enjoy :)\n\n- rcmealbot admin'
+        #         mass_msg = '*Update*\n\nThank you for using @rcmealbot and for giving valuable feedback! ' + \
+        #         'Here are some *improvements* to the bot:\n\n' + \
+        #         u'\U0001F539' + ' /breakfast and /dinner menus are now *separate*\n' + \
+        #         u'\U0001F539' + ' breakfast updates will be sent at midnight while dinner updates will be sent at *4pm* daily\n' + \
+        #         u'\U0001F539' + ' command to check credits has been *simplified* to /meals\n\n' + \
+        #         'Examples:\n/breakfast tomorrow\n/dinner next monday\n/meals\n\n' + \
+        #         'Hope you\'ll continue to find the bot useful! :)\n\n- rcmealbot admin'
         #         send_message(user, mass_msg, msg_type='mass', markdown=True)
 
         # except Exception as e:
