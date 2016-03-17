@@ -484,7 +484,7 @@ class MainPage(webapp2.RequestHandler):
 
     def post(self):
         def build_command_list():
-            cmds = '/checkmeals - check meal credits' if user.is_authenticated() else '/login - to check meal credits'
+            cmds = '/meals - check meal credits' if user.is_authenticated() else '/login - to check meal credits'
             cmds += '\n/breakfast - view today\'s breakfast menu'
             cmds += '\n/dinner - view today\'s dinner menu'
             cmds += '\n/settings - turn on/off automatic updates'
@@ -582,7 +582,7 @@ class MainPage(webapp2.RequestHandler):
 
         cmd = text.lower().strip()
 
-        if is_command('checkmeals'):
+        if is_command('meals'):
             if not user.is_authenticated():
                 send_message(user, 'Did you mean to /login?')
                 return
