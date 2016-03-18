@@ -41,8 +41,8 @@ LOG_TYPE_NON_TEXT = 'Type: Non-text'
 LOG_TYPE_COMMAND = 'Type: Command\n'
 LOG_UNRECOGNISED = 'Unrecognised command'
 LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
-LOG_SESSION_ALIVE = '{} is still authenticated'
-LOG_SESSION_EXPIRED = 'Session expired for user {}'
+LOG_SESSION_ALIVE = 'Session kept alive for {}'
+LOG_SESSION_EXPIRED = 'Session expired for {}'
 
 RECOGNISED_ERROR_MIGRATE = '[Error]: Bad Request: group chat is migrated to supergroup chat'
 RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
@@ -76,7 +76,6 @@ def get_new_jsessionid():
 
 def check_auth(jsessionid):
     url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
-    logging.debug(LOG_AUTH + jsessionid)
 
     try:
         result = urlfetch.fetch(url, method=urlfetch.HEAD, follow_redirects=False, deadline=10)
@@ -853,7 +852,7 @@ class AuthPage(webapp2.RequestHandler):
             for user in query.run(batch_size=500):
                 result = check_auth(user.jsessionid)
                 if result:
-                    logging.info(LOG_SESSION_ALIVE.format(user.get_description().capitalize()))
+                    logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
                 elif result == None:
                     logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
                     queue_reauth(user)
@@ -882,7 +881,7 @@ class ReauthPage(webapp2.RequestHandler):
 
         result = check_auth(user.jsessionid)
         if result:
-            logging.info(LOG_SESSION_ALIVE.format(user.get_description().capitalize()))
+            logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
         elif result == None:
             logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
             self.abort(502)
