@@ -41,7 +41,7 @@ LOG_TYPE_NON_TEXT = 'Type: Non-text'
 LOG_TYPE_COMMAND = 'Type: Command\n'
 LOG_UNRECOGNISED = 'Unrecognised command'
 LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
-LOG_SESSION_ALIVE = 'User {} is still authenticated'
+LOG_SESSION_ALIVE = '{} is still authenticated'
 LOG_SESSION_EXPIRED = 'Session expired for user {}'
 
 RECOGNISED_ERROR_MIGRATE = '[Error]: Bad Request: group chat is migrated to supergroup chat'
@@ -76,7 +76,7 @@ def get_new_jsessionid():
 
 def check_auth(jsessionid):
     url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
-    logging.info(LOG_AUTH + jsessionid)
+    logging.debug(LOG_AUTH + jsessionid)
 
     try:
         result = urlfetch.fetch(url, method=urlfetch.HEAD, follow_redirects=False, deadline=10)
@@ -88,7 +88,7 @@ def check_auth(jsessionid):
 
 def check_meals(jsessionid, first_time_user=None, get_excel=False):
     url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
-    logging.info(LOG_AUTH + jsessionid)
+    logging.debug(LOG_AUTH + jsessionid)
 
     try:
         result = urlfetch.fetch(url, follow_redirects=False, deadline=10)
@@ -853,7 +853,7 @@ class AuthPage(webapp2.RequestHandler):
             for user in query.run(batch_size=500):
                 result = check_auth(user.jsessionid)
                 if result:
-                    logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
+                    logging.info(LOG_SESSION_ALIVE.format(user.get_description().capitalize()))
                 elif result == None:
                     logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
                     queue_reauth(user)
@@ -882,7 +882,7 @@ class ReauthPage(webapp2.RequestHandler):
 
         result = check_auth(user.jsessionid)
         if result:
-            logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
+            logging.info(LOG_SESSION_ALIVE.format(user.get_description().capitalize()))
         elif result == None:
             logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
             self.abort(502)
