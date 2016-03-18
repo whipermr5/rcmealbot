@@ -15,7 +15,11 @@ cron:
   url: /weekly
   schedule: every sunday 21:35
   timezone: Asia/Singapore
-- description: menu database update
+- description: menu database check
   url: /menu
+  schedule: every day 22:35
+  timezone: Asia/Singapore
+- description: menu database update
+  url: /menu?commit=1
   schedule: 1 of jan 00:00
   timezone: Asia/Singapore

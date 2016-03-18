@@ -893,8 +893,10 @@ class ReauthPage(webapp2.RequestHandler):
 
 class MenuPage(webapp2.RequestHandler):
     def get(self):
-        self.response.headers['Content-Type'] = 'text/plain'
-        self.response.write('Submitted update request')
+        if self.request.get('commit', False):
+            commit = True
+        else:
+            commit = False
 
         url = 'http://nus.edu.sg/ohs/current-residents/students/dining-daily.php'
         try:
@@ -950,11 +952,19 @@ class MenuPage(webapp2.RequestHandler):
                 dinners.append(dinner)
         days = len(breakfasts)
         data = get_data()
-        data.breakfasts = str(breakfasts)
-        data.dinners = str(dinners)
-        data.start_date = start_date
-        data.put()
-        logging.info('Updated menu from {} for {} days:\n\n{}\n\n{}'.format(start_date_text, days, get_data().breakfasts, get_data().dinners))
+        if commit:
+            data.breakfasts = str(breakfasts)
+            data.dinners = str(dinners)
+            data.start_date = start_date
+            data.put()
+            logging.info('Updated menu from {} for {} days'.format(start_date_text, days))
+        else:
+            changed = str(breakfasts) != data.breakfasts or str(dinners) != data.dinners
+            if changed:
+                logging.info('Detected change in menu')
+                send_message(ADMIN_ID, 'OHS has updated the menu!')
+            else:
+                logging.info('No change in menu detected')
 
 class MigratePage(webapp2.RequestHandler):
     def get(self):
