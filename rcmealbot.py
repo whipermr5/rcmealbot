@@ -990,7 +990,7 @@ class MigratePage(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
         # data = get_data()
-        # data.notes = str({})
+        # data.notes = str({'2016-04-06-D': u'\u26a0 CAPT/RC4 dining hall closed due to RC4 College Formal Dinner'})
         # data.cancellations = str({})
         # data.put()
 
