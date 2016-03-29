@@ -225,7 +225,7 @@ def get_menu(today_date, meal_type):
 
     note = notes.get(today_date_lookup)
     if note:
-        menu += '\n\n' + note
+        menu += '\f' + note
 
     friendly_date = today_date.strftime('%-d %b %Y (%A)')
     heading = HEADING_BREAKFAST if meal_type == 'breakfast' else HEADING_DINNER
@@ -440,14 +440,15 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
         elif handle_response(response, user, uid, msg_type) == False:
             queue_message()
 
-    if len(text) > 4096:
-        chunks = textwrap.wrap(text, width=4096, replace_whitespace=False, drop_whitespace=False)
-        i = 0
-        for chunk in chunks:
-            send_short_message(chunk, i)
-            i += 1
-    else:
-        send_short_message(text)
+    i = 0
+    for text in text.split('\f'):
+        if len(text) > 4096:
+            chunks = textwrap.wrap(text, width=4096, replace_whitespace=False, drop_whitespace=False)
+            for chunk in chunks:
+                send_short_message(chunk, i)
+                i += 1
+        else:
+            send_short_message(text)
 
 def handle_response(response, user, uid, msg_type):
     if response.get('ok') == True:
@@ -990,7 +991,7 @@ class MigratePage(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
         # data = get_data()
-        # data.notes = str({'2016-04-06-D': u'\u26a0 CAPT/RC4 dining hall closed due to RC4 College Formal Dinner'})
+        # data.notes = str({'2016-04-06-D': u'\u26a0 CAPT/RC4 dining hall will be closed due to RC4 College Formal Dinner. Packed dinner will be served at the link bridge at the entrance of the dining hall from 5.30pm to 9.30pm.\n\n*~ Vegetarian (Halal) ~*\nKhadi Dhall\nMushroom & Matter Masala\nMix Vege yoghurt \nFruit of the Day\nBottled Water\n\n*~ Non-Vegetarian (Halal) ~*\nPlain Rice\nChicken Masala \nAssam Chilli Fish\nStir fry Lady finger \nFruit of the Day\nBottled Water'})
         # data.cancellations = str({})
         # data.put()
 
