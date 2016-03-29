@@ -23,6 +23,7 @@ HEADING_BREAKFAST = u'\U0001F32E' + ' *Breakfast*'
 HEADING_DINNER = u'\U0001F35C' + ' *Dinner*'
 NOTE_FRUIT = '\n\n' + u'\U0001F34A' + ' _Fruits will be served at the counter_'
 NOTE_UNSUBSCRIBE = '\n\n(use /dailyoff to unsubscribe)'
+NOTE_UNSUBSCRIBE_WEEKLY = '\n\n(use /weeklyoff to unsubscribe)'
 EMPTY = 'empty'
 
 LOG_SENT = '{} {} sent to uid {} ({})'
@@ -199,19 +200,36 @@ def weekly_summary(xls_data):
     return '{} ({} and {})'.format(overall_description, breakfast_description, dinner_description)
 
 def get_menu(today_date, meal_type):
+    today_date_lookup = today_date.strftime('%Y-%m-%d-')
     if meal_type == 'breakfast':
         menus = ast.literal_eval(get_data().breakfasts)
+        today_date_lookup += 'B'
     else:
         menus = ast.literal_eval(get_data().dinners)
+        today_date_lookup += 'D'
+    notes = ast.literal_eval(get_data().notes)
+    cancellations = ast.literal_eval(get_data().cancellations)
+
     day = (today_date - get_data().start_date).days
     if day < 0 or day >= len(menus):
         return EMPTY
-    menu = menus[day]
-    if not menu:
-        return None
+
+    cancellation = cancellations.get(today_date_lookup)
+    if cancellation:
+        menu = cancellation
+    else:
+        menu = menus[day]
+        if not menu:
+            return None
+        menu += NOTE_FRUIT
+
+    note = notes.get(today_date_lookup)
+    if note:
+        menu += '\n\n' + note
+
     friendly_date = today_date.strftime('%-d %b %Y (%A)')
     heading = HEADING_BREAKFAST if meal_type == 'breakfast' else HEADING_DINNER
-    return heading + ' - _{}_\n\n{}'.format(friendly_date, menu) + NOTE_FRUIT
+    return heading + ' - _{}_\n\n'.format(friendly_date) + menu
 
 def get_today_date():
     return (datetime.utcnow() + timedelta(hours=8)).date()
@@ -323,6 +341,8 @@ class User(db.Model):
 class Data(db.Model):
     breakfasts = db.TextProperty()
     dinners = db.TextProperty()
+    notes = db.TextProperty()
+    cancellations = db.TextProperty()
     start_date = db.DateProperty(indexed=False)
 
 def get_user(uid):
@@ -801,7 +821,7 @@ class WeeklyPage(webapp2.RequestHandler):
                     send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
                     continue
 
-                summary = '*Weekly Summary*\nYou had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals
+                summary = '*Weekly Summary*\nYou had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals + NOTE_UNSUBSCRIBE_WEEKLY
                 send_message(user, summary, msg_type='weekly', markdown=True)
         except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
@@ -969,6 +989,10 @@ class MigratePage(webapp2.RequestHandler):
     def get(self):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
+        # data = get_data()
+        # data.notes = str({})
+        # data.cancellations = str({})
+        # data.put()
 
 class MassPage(webapp2.RequestHandler):
     def get(self):
