@@ -199,7 +199,7 @@ def weekly_summary(xls_data):
 
     return '{} ({} and {})'.format(overall_description, breakfast_description, dinner_description)
 
-def get_menu(today_date, meal_type):
+def get_menu(today_date, meal_type, is_auto=False):
     today_date_lookup = today_date.strftime('%Y-%m-%d-')
     if meal_type == 'breakfast':
         menus = ast.literal_eval(get_data().breakfasts)
@@ -222,6 +222,9 @@ def get_menu(today_date, meal_type):
         if not menu:
             return None
         menu += NOTE_FRUIT
+
+    if is_auto:
+        menu += NOTE_UNSUBSCRIBE
 
     note = notes.get(today_date_lookup)
     if note:
@@ -764,11 +767,9 @@ class MainPage(webapp2.RequestHandler):
 
 class DailyPage(webapp2.RequestHandler):
     def run(self, meal_type):
-        menu = get_menu(get_today_date(), meal_type=meal_type)
+        menu = get_menu(get_today_date(), meal_type=meal_type, is_auto=True)
         if not menu or menu == EMPTY:
             return True
-
-        menu += NOTE_UNSUBSCRIBE
 
         if meal_type == 'breakfast':
             msg_type = 'daily'
