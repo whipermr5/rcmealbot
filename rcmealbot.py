@@ -900,6 +900,9 @@ class ReauthPage(webapp2.RequestHandler):
     def post(self):
         uid = self.request.body
         user = get_user(uid)
+        if not user.jsessionid:
+            user.set_authenticated(False)
+            return
 
         result = check_auth(user.jsessionid)
         if result:
