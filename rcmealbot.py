@@ -44,6 +44,7 @@ LOG_UNRECOGNISED = 'Unrecognised command'
 LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
 LOG_SESSION_ALIVE = 'Session kept alive for {}'
 LOG_SESSION_EXPIRED = 'Session expired for {}'
+LOG_SESSION_INACTIVE = 'Session inactive for {}'
 
 RECOGNISED_ERROR_MIGRATE = '[Error]: Bad Request: group chat is migrated to supergroup chat'
 RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
@@ -901,6 +902,7 @@ class ReauthPage(webapp2.RequestHandler):
         uid = self.request.body
         user = get_user(uid)
         if not user.jsessionid:
+            logging.info(LOG_SESSION_INACTIVE.format(user.get_description()))
             user.set_authenticated(False)
             return
 
