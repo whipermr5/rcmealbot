@@ -764,7 +764,8 @@ class MainPage(webapp2.RequestHandler):
 
         else:
             logging.info(LOG_UNRECOGNISED)
-            send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
+            if not user.is_group():
+                send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
 
 class DailyPage(webapp2.RequestHandler):
     def run(self, meal_type):
@@ -997,7 +998,7 @@ class MigratePage(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
         # data = get_data()
-        # data.notes = str({'2016-04-06-D': u'\u26a0 CAPT/RC4 dining hall will be closed due to RC4 College Formal Dinner. Packed dinner will be served at the link bridge at the entrance of the dining hall from 5.30pm to 9.30pm.\n\n*~ Vegetarian (Halal) ~*\nKhadi Dhall\nMushroom & Matter Masala\nMix Vege yoghurt \nFruit of the Day\nBottled Water\n\n*~ Non-Vegetarian (Halal) ~*\nPlain Rice\nChicken Masala \nAssam Chilli Fish\nStir fry Lady finger \nFruit of the Day\nBottled Water'})
+        # data.notes = str({})
         # data.cancellations = str({})
         # data.put()
 
