@@ -46,7 +46,8 @@ LOG_SESSION_ALIVE = 'Session kept alive for {}'
 LOG_SESSION_EXPIRED = 'Session expired for {}'
 LOG_SESSION_INACTIVE = 'Session inactive for {}'
 
-RECOGNISED_ERROR_MIGRATE = '[Error : 400 : Bad Request: group chat is migrated to supergroup chat]'
+RECOGNISED_ERROR_MIGRATE = 'Bad Request: group chat is migrated to a supergroup chat'
+#RECOGNISED_ERROR_MIGRATE = '[Error : 400 : Bad Request: group chat is migrated to supergroup chat]'
 #RECOGNISED_ERROR_MIGRATE = '[Error]: Bad Request: group chat is migrated to supergroup chat'
 RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
                      '[Error]: Bot was kicked from a chat',
@@ -61,6 +62,11 @@ RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
                      '[Error]: Forbidden: can\'t write to private chat with deleted user',
                      '[Error]: Forbidden: bot is not a participant of the channel chat',
                      '[Error]: Forbidden: bot is not a participant of the supergroup chat',
+                     'Bot was blocked by the user',
+                     'Forbidden: user is deleted',
+                     'Forbidden: bot was kicked from the supergroup chat',
+                     'Bad Request: chat not found',
+                     'Bad Request: group chat is deactivated',
                      '[Error : 400 : PEER_ID_INVALID]',
                      '[Error : 400 : Bad Request: chat not found]',
                      '[Error : 400 : Bad Request: group chat is deactivated]',
@@ -139,10 +145,15 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
         end = html.find('</td>', start)
         meal_pref = html[start:end].replace('&nbsp;', ' ').strip()
 
-        first_time_user.full_name = BeautifulSoup(full_name, 'lxml').text
-        first_time_user.matric = matric
-        first_time_user.meal_pref = meal_pref
-        first_time_user.put()
+        try:
+            first_time_user.full_name = BeautifulSoup(full_name, 'lxml').text
+            first_time_user.matric = matric
+            first_time_user.meal_pref = meal_pref
+            first_time_user.put()
+        except:
+            logging.warning('Error parsing user info: assuming auth failure')
+            logging.debug(html)
+            return UNAUTHORISED
 
         logging.info(LOG_AUTH_SUCCESS.format(full_name, matric))
         return 'Success! You are logged in as *{}* _({})_.\n\n'.format(full_name, matric)
