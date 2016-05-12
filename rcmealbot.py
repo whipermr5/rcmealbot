@@ -46,33 +46,14 @@ LOG_SESSION_ALIVE = 'Session kept alive for {}'
 LOG_SESSION_EXPIRED = 'Session expired for {}'
 LOG_SESSION_INACTIVE = 'Session inactive for {}'
 
+RECOGNISED_ERROR_PARSE = 'Bad Request: Can\'t parse message text'
 RECOGNISED_ERROR_MIGRATE = 'Bad Request: group chat is migrated to a supergroup chat'
-#RECOGNISED_ERROR_MIGRATE = '[Error : 400 : Bad Request: group chat is migrated to supergroup chat]'
-#RECOGNISED_ERROR_MIGRATE = '[Error]: Bad Request: group chat is migrated to supergroup chat'
-RECOGNISED_ERRORS = ('[Error]: PEER_ID_INVALID',
-                     '[Error]: Bot was kicked from a chat',
-                     '[Error]: Bot was blocked by the user',
-                     '[Error]: Bad Request: chat not found',
-                     '[Error]: Bad Request: group is deactivated',
-                     '[Error]: Bad Request: group chat is deactivated',
-                     '[Error]: Forbidden: bot was kicked from the group chat',
-                     '[Error]: Forbidden: bot was kicked from the channel chat',
-                     '[Error]: Forbidden: bot was kicked from the supergroup chat',
-                     '[Error]: Forbidden: can\'t write to chat with deleted user',
-                     '[Error]: Forbidden: can\'t write to private chat with deleted user',
-                     '[Error]: Forbidden: bot is not a participant of the channel chat',
-                     '[Error]: Forbidden: bot is not a participant of the supergroup chat',
+RECOGNISED_ERRORS = ('PEER_ID_INVALID',
                      'Bot was blocked by the user',
                      'Forbidden: user is deleted',
                      'Forbidden: bot was kicked from the supergroup chat',
                      'Bad Request: chat not found',
                      'Bad Request: group chat is deactivated',
-                     '[Error : 400 : PEER_ID_INVALID]',
-                     '[Error : 400 : Bad Request: chat not found]',
-                     '[Error : 400 : Bad Request: group chat is deactivated]',
-                     '[Error : 403 : Bot was blocked by the user]',
-                     '[Error : 403 : Forbidden: bot was kicked from the supergroup chat]',
-                     '[Error : 403 : Forbidden: can\'t write to private chat with deleted user]',
                      RECOGNISED_ERROR_MIGRATE)
 
 def get_new_jsessionid():
@@ -453,7 +434,7 @@ def send_message(user_or_uid, text, msg_type='message', force_reply=False, markd
         response = json.loads(result.content)
         error_description = str(response.get('description'))
 
-        if error_description.startswith('[Error]: Bad Request: can\'t parse message'):
+        if error_description.startswith(RECOGNISED_ERROR_PARSE):
             if build.get('parse_mode'):
                 del build['parse_mode']
             data = json.dumps(build)
