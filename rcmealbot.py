@@ -42,6 +42,7 @@ LOG_TYPE_NON_TEXT = 'Type: Non-text'
 LOG_TYPE_COMMAND = 'Type: Command\n'
 LOG_UNRECOGNISED = 'Unrecognised command'
 LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
+LOG_USER_DELETED = 'Deleted uid {} ({})'
 LOG_SESSION_ALIVE = 'Session kept alive for {}'
 LOG_SESSION_EXPIRED = 'Session expired for {}'
 LOG_SESSION_INACTIVE = 'Session inactive for {}'
@@ -473,6 +474,11 @@ def handle_response(response, user, uid, msg_type):
             if new_uid:
                 user = user.migrate_to(new_uid)
                 logging.info(LOG_USER_MIGRATED.format(uid, new_uid, user.get_description()))
+        else:
+            user_description = user.get_description()
+            user.delete()
+            logging.info(LOG_USER_DELETED.format(uid, user_description))
+            return True
 
         user.set_active(False)
         user.set_active_weekly(False)
