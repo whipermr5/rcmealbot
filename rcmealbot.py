@@ -17,7 +17,7 @@ TELEGRAM_URL_CHAT_ACTION = TELEGRAM_URL + '/sendChatAction'
 JSON_HEADER = {'Content-Type': 'application/json;charset=utf-8'}
 
 BASE_URL = 'https://myaces.nus.edu.sg/Prjhml/'
-UNAUTHORISED = 'empty'
+UNAUTHORISED = 'unauthorised'
 SESSION_EXPIRED = 'Sorry {}, your session has expired. Please /login again.'
 HEADING_BREAKFAST = u'\U0001F32E' + ' *Breakfast*'
 HEADING_DINNER = u'\U0001F35C' + ' *Dinner*'
@@ -102,7 +102,10 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
     html = result.content
 
     if get_excel:
-        start = html.find('<div class="exportlinks"> Export As: ') + 47
+        start = html.find('<div class="exportlinks"> Export As: ')
+        if start == -1:
+            return EMPTY
+        start += 47
         end = html.find('&amp;', start)
         link = html[start:end]
         xls_url = BASE_URL + link
@@ -170,6 +173,9 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
     return '*Breakfast*\n' + summarise(breakfast) + '\n\n*Dinner*\n' + summarise(dinner)
 
 def weekly_summary(xls_data):
+    if xls_data == EMPTY:
+        return '0 meals'
+
     def describe(number_of_meals, meal_type):
         if number_of_meals == 0:
             description = 'no {}s'.format(meal_type)
