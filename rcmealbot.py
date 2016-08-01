@@ -948,58 +948,90 @@ class MenuPage(webapp2.RequestHandler):
         else:
             commit = False
 
-        url = 'http://nus.edu.sg/ohs/current-residents/students/dining-daily.php'
-        try:
-            result = urlfetch.fetch(url, deadline=10)
-        except Exception as e:
-            logging.warning(LOG_ERROR_REMOTE + str(e))
-            return
+        url_format = 'http://hg.sg/nus_ohs_admin/adminOHS/backend/script/index.php?' + \
+                     'controller=pjFront&action=pjActionLoadEventDetail&index=4455&cate=0&dt={}'
+        start_date = datetime(2016, 7, 31).date()
 
-        html = result.content
-        soup = BeautifulSoup(html, 'lxml')
+        def get_category(soup):
+            html = str(soup)
+            if 'helpyourself.png' in html:
+                return 'Help Yourself'
+            elif 'western.png' in html:
+                return 'Western'
+            elif 'timsum.png' in html:
+                return 'Tim Sum'
+            elif 'asian.png' in html:
+                return 'Asian'
+            elif 'veg.png' in html:
+                return 'Vegetarian'
+            elif 'muslim.png' in html:
+                return 'Malay (Halal)'
+            elif 'grab.png' in html:
+                return 'Grab & Go'
+            elif 'indian.png' in html:
+                return 'Indian'
+            elif 'noodle.png' in html:
+                return 'Noodle'
+            elif 'specials.png' in html:
+                return 'Special of the Day'
+            else:
+                return soup.text.strip().title()
 
-        for tag in soup.select('.td-cat img'):
-            text = tag.get('alt')
-            if text == 'Description':
-                text = 'Others'
-            tag.string = '\n-\n*~ ' + text + ' ~*\n'
+        def get_text(soup):
+            for tag in soup.select('br'):
+                tag.name = 'span'
+                tag.string = '\n'
+            output = ''
+            for line in soup.text.split('\n'):
+                output += line.strip() + '\n'
+            return output.strip()
 
-        for tag in soup.select('br'):
-            tag.name = 'span'
-            tag.string = '\n'
+        def get_menu(soup):
+            output = ''
+            for tr in soup.select('tr'):
+                tds = tr.select('td')
+                category = get_category(tds[0])
+                text = get_text(tds[1])
+                if not category and not text:
+                    continue
+                output += '*~ {} ~*\n'.format(category) + text + '\n\n'
+            return output.rstrip()
 
-        start_date_text = soup.select('.day-1 h4')[0].text
-        idx = start_date_text.find('\n')
-        start_date_text = start_date_text[:idx]
-        start_date = datetime.strptime(start_date_text, "%d %b %Y").date()
+        def get_menus(url):
+            try:
+                result = urlfetch.fetch(url, deadline=10)
+            except Exception as e:
+                logging.warning(LOG_ERROR_REMOTE + str(e))
+                self.abort(502)
+            html = result.content
+            soup = BeautifulSoup(html, 'lxml')
+            headers = soup.select('.pull-left')
+            bodies = soup.select('.tbl-menuu')
+            if len(headers) == 0:
+                return (None, None)
+            elif len(headers) == 1:
+                header = headers[0].text.lower()
+                if 'breakfast' in header:
+                    return (get_menu(bodies[0]), None)
+                else:
+                    return (None, get_menu(bodies[0]))
+            else:
+                return (get_menu(bodies[0]), get_menu(bodies[1]))
 
-        for tag in soup.select('h4'):
-            tag.decompose()
-
-        for tag in soup.select('tr'):
-            text = tag.text.strip()
-            tag.string = text + '\n'
-
-        days = len(soup.select('.day-menu'))
         breakfasts = []
         dinners = []
-        for i in range(days):
-            breakfast = ''
-            for tag in soup.select('.day-{} .menu-breakfast'.format(i + 1)):
-                breakfast += tag.text.strip() + '\n'
-            breakfast = breakfast.replace('\n-\n', '\n\n').lstrip('-').strip()
-            dinner = ''
-            for tag in soup.select('.day-{} .menu-dinner'.format(i + 1)):
-                dinner += tag.text.strip() + '\n'
-            dinner = dinner.replace('\n-\n', '\n\n').lstrip('-').strip()
-            if i % 6 == 5:
-                breakfasts.append(breakfast)
-                breakfasts.append(None)
-                dinners.append(None)
-                dinners.append(dinner)
-            else:
-                breakfasts.append(breakfast)
-                dinners.append(dinner)
+        days = 0
+        while True:
+            url = url_format.format((start_date + timedelta(days=days)).strftime('%Y-%m-%d'))
+            days += 1
+            result = get_menus(url)
+            if result == (None, None):
+                break
+            breakfast = result[0]
+            dinner = result[1]
+            breakfasts.append(breakfast)
+            dinners.append(dinner)
+
         days = len(breakfasts)
         data = get_data()
         if commit:
@@ -1007,6 +1039,7 @@ class MenuPage(webapp2.RequestHandler):
             data.dinners = str(dinners)
             data.start_date = start_date
             data.put()
+            start_date_text = start_date.strftime('%d %b %Y')
             logging.info('Updated menu from {} for {} days'.format(start_date_text, days))
         else:
             changed = str(breakfasts) != data.breakfasts or str(dinners) != data.dinners
