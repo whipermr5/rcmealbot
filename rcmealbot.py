@@ -10,11 +10,14 @@ from google.appengine.ext import db
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
-from secrets import TOKEN, ADMIN_ID
+from secrets import TOKEN, ADMIN_ID, APIAI_TOKEN
 TELEGRAM_URL = 'https://api.telegram.org/bot' + TOKEN
 TELEGRAM_URL_SEND = TELEGRAM_URL + '/sendMessage'
 TELEGRAM_URL_CHAT_ACTION = TELEGRAM_URL + '/sendChatAction'
 JSON_HEADER = {'Content-Type': 'application/json;charset=utf-8'}
+APIAI_URL = 'https://api.api.ai/v1/query?v=20150910'
+APIAI_HEADER = {'Content-Type': 'application/json;charset=utf-8',
+                'Authorization': 'Bearer ' + APIAI_TOKEN}
 
 BASE_URL = 'https://myaces.nus.edu.sg/Prjhml/'
 UNAUTHORISED = 'unauthorised'
@@ -37,6 +40,8 @@ LOG_ERROR_DATASTORE = 'Error reading from datastore:\n'
 LOG_ERROR_REMOTE = 'Error accessing site:\n'
 LOG_ERROR_AUTH = 'Error sending auth request for uid {} ({})'
 LOG_ERROR_QUERY = 'Error querying uid {} ({}): {}'
+LOG_ERROR_APIAI_FETCH = 'Error querying api.ai:\n'
+LOG_ERROR_APIAI_PARSE = 'Error parsing api.ai response:\n'
 LOG_TYPE_START_NEW = 'Type: Start (new user)'
 LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
 LOG_TYPE_NON_TEXT = 'Type: Non-text'
@@ -259,6 +264,38 @@ def get_today_time():
 def parse_date(friendly):
     now = datetime.utcnow() + timedelta(hours=8)
     return parsedatetime.Calendar().parseDT(friendly, now)[0].date()
+
+def apiai_post(data, deadline=3, retries=10):
+    try:
+        output = urlfetch.fetch(url=APIAI_URL, payload=data, method=urlfetch.POST,
+                                headers=APIAI_HEADER, deadline=deadline)
+    except Exception as e:
+        if retries > 0:
+            return apiai_post(data, retries=retries - 1)
+        else:
+            raise e
+    return output
+
+def make_smalltalk(query, uid):
+    payload = {
+        'query': query,
+        'sessionId': uid,
+        'lang': 'en'
+    }
+    data = json.dumps(payload)
+    try:
+        result = apiai_post(data)
+    except Exception as e:
+        logging.warning(LOG_ERROR_APIAI_FETCH + str(e))
+        return None
+    try:
+        response = json.loads(result.content)
+        smalltalk = response.get('result').get('fulfillment').get('speech')
+        logging.info(smalltalk)
+        return smalltalk
+    except Exception as e:
+        logging.warning(LOG_ERROR_APIAI_PARSE + str(e))
+        return None
 
 class User(db.Model):
     username = db.StringProperty(indexed=False)
@@ -520,8 +557,8 @@ class MainPage(webapp2.RequestHandler):
     ABOUT = 'Created by @whipermr5. Comments, feedback and suggestions are welcome!\n\n' + \
             'Food menu extracted from http://nus.edu.sg/ohs/current-residents/students/dining-daily.php\n\n' + \
             'P.S. CAPT rocks! And God loves you :)'
-    UNRECOGNISED = 'Sorry {}, I couldn\'t understand that. ' + \
-                   'Please enter one of the following commands:\n\n'
+    UNRECOGNISED = 'Sorry {}, my logic module isn\'t responding. Talking to humans is hard :( ' + \
+                   'Let it rest for awhile and try one of the following dumb commands instead:\n\n'
     REMOTE_ERROR = 'Sorry {}, I\'m having some difficulty accessing the site. ' + \
                    'Please try again later.'
 
@@ -786,9 +823,15 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, 'You have successfully logged out. /login again?')
 
         else:
-            logging.info(LOG_UNRECOGNISED)
-            if not user.is_group():
-                send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
+            send_typing(uid)
+            smalltalk = make_smalltalk(text, uid)
+
+            if smalltalk:
+                send_message(user, smalltalk)
+            else:
+                logging.info(LOG_UNRECOGNISED)
+                if not user.is_group():
+                    send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
 
 class DailyPage(webapp2.RequestHandler):
     def run(self, meal_type):
