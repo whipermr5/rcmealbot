@@ -35,6 +35,7 @@ LOG_AUTH_FAILED = 'Authentication failed for uid {} ({})'
 LOG_AUTH_SUCCESS = 'Successfully authenticated as {} ({})'
 LOG_ENQUEUED = 'Enqueued {} to uid {} ({})'
 LOG_DID_NOT_SEND = 'Did not send {} to uid {} ({}): {}'
+LOG_EMPTY_MEAL_DATA = 'Empty meal data'
 LOG_ERROR_SENDING = 'Error sending {} to uid {} ({}):\n{}'
 LOG_ERROR_DATASTORE = 'Error reading from datastore:\n'
 LOG_ERROR_REMOTE = 'Error accessing site:\n'
@@ -46,7 +47,7 @@ LOG_TYPE_START_NEW = 'Type: Start (new user)'
 LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
 LOG_TYPE_NON_TEXT = 'Type: Non-text'
 LOG_TYPE_COMMAND = 'Type: Command\n'
-LOG_UNRECOGNISED = 'Unrecognised command'
+LOG_TYPE_SMALLTALK = 'Type: Small talk'
 LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
 LOG_USER_DELETED = 'Deleted uid {} ({})'
 LOG_USER_REACHABLE = 'Uid {} ({}) is still reachable'
@@ -167,6 +168,7 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
             d3 = data[3]
             d4 = data[5]
         except IndexError:
+            logging.info(LOG_EMPTY_MEAL_DATA)
             pass
         return 'Consumed: {}\nForfeited: {}\nCarried forward: {}\nTotal remaining: {}'.format(d1, d2, d3, d4)
 
@@ -557,7 +559,7 @@ class MainPage(webapp2.RequestHandler):
     ABOUT = 'Created by @whipermr5. Comments, feedback and suggestions are welcome!\n\n' + \
             'Food menu extracted from http://nus.edu.sg/ohs/current-residents/students/dining-daily.php\n\n' + \
             'P.S. CAPT rocks! And God loves you :)'
-    UNRECOGNISED = 'Sorry {}, my logic module isn\'t responding. Talking to humans is hard :( ' + \
+    UNRESPONSIVE = 'Sorry {}, my logic module isn\'t responding. Talking to humans is hard :( ' + \
                    'Let it rest for awhile and try one of the following dumb commands instead:\n\n'
     REMOTE_ERROR = 'Sorry {}, I\'m having some difficulty accessing the site. ' + \
                    'Please try again later.'
@@ -662,7 +664,11 @@ class MainPage(webapp2.RequestHandler):
                 logging.info(LOG_USER_MIGRATED.format(uid, new_uid, user.get_description()))
             return
 
-        logging.info(LOG_TYPE_COMMAND + text)
+        if text.startswith('/'):
+            logging.info(LOG_TYPE_COMMAND + text)
+        else:
+            logging.info(LOG_TYPE_SMALLTALK)
+            logging.info(text)
 
         cmd = text.lower().strip()
 
@@ -823,15 +829,16 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, 'You have successfully logged out. /login again?')
 
         else:
+            if user.is_group():
+                return
+
             send_typing(uid)
             smalltalk = make_smalltalk(text, uid)
 
             if smalltalk:
                 send_message(user, smalltalk)
             else:
-                logging.info(LOG_UNRECOGNISED)
-                if not user.is_group():
-                    send_message(user, self.UNRECOGNISED.format(first_name) + build_command_list())
+                send_message(user, self.UNRESPONSIVE.format(first_name) + build_command_list())
 
 class DailyPage(webapp2.RequestHandler):
     def run(self, meal_type):
