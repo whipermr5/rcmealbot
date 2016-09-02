@@ -46,6 +46,8 @@ LOG_ERROR_APIAI_PARSE = 'Error parsing api.ai response:\n'
 LOG_TYPE_START_NEW = 'Type: Start (new user)'
 LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
 LOG_TYPE_NON_TEXT = 'Type: Non-text'
+LOG_TYPE_NON_MESSAGE = 'Type: Non-message'
+LOG_TYPE_EDITED_MESSAGE = 'Type: Edited message'
 LOG_TYPE_COMMAND = 'Type: Command\n'
 LOG_TYPE_SMALLTALK = 'Type: Small talk'
 LOG_USER_MIGRATED = 'User {} migrated to uid {} ({})'
@@ -599,6 +601,14 @@ class MainPage(webapp2.RequestHandler):
         logging.debug(self.request.body)
 
         msg = data.get('message')
+        if not msg:
+            msg = data.get('edited_message')
+            if msg:
+                logging.info(LOG_TYPE_EDITED_MESSAGE)
+            else:
+                logging.info(LOG_TYPE_NON_MESSAGE)
+                return
+
         msg_chat = msg.get('chat')
         msg_from = msg.get('from')
 
