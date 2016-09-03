@@ -293,10 +293,16 @@ def make_smalltalk(query, uid):
         logging.warning(LOG_ERROR_APIAI_FETCH + str(e))
         return None
     try:
+        logging.debug(result.content)
         response = json.loads(result.content)
-        smalltalk = response.get('result').get('fulfillment').get('speech')
-        logging.info(smalltalk)
-        return smalltalk
+        if response.get('result').get('action') == 'breakfast':
+            return ('breakfast', response.get('result').get('parameters').get('date'))
+        elif response.get('result').get('action') == 'dinner':
+            return ('dinner', response.get('result').get('parameters').get('date'))
+        else:
+            smalltalk = response.get('result').get('fulfillment').get('speech')
+            logging.info(smalltalk)
+            return ('smalltalk', smalltalk)
     except Exception as e:
         logging.warning(LOG_ERROR_APIAI_PARSE + str(e))
         return None
@@ -682,6 +688,17 @@ class MainPage(webapp2.RequestHandler):
 
         cmd = text.lower().strip()
 
+        def handle_menu(meal_type, target_date):
+            menu = get_menu(target_date, meal_type=meal_type)
+            friendly_date = target_date.strftime('%-d %b %Y (%A)')
+
+            if menu == EMPTY:
+                send_message(user, 'Sorry {}, OHS has not uploaded the {} menu for {} yet.'.format(first_name, meal_type, friendly_date))
+            elif not menu:
+                send_message(user, 'Sorry {}, {} is not served on {}.'.format(first_name, meal_type, friendly_date))
+            else:
+                send_message(user, menu, markdown=True)
+
         if is_command('meals'):
             if not user.is_authenticated():
                 send_message(user, 'Did you mean to /login?')
@@ -759,35 +776,19 @@ class MainPage(webapp2.RequestHandler):
 
         elif is_command('breakfast'):
             if len(cmd) > 10:
-                today_date = parse_date(cmd[10:].strip())
+                target_date = parse_date(cmd[10:].strip())
             else:
-                today_date = get_today_date()
+                target_date = get_today_date()
 
-            breakfast = get_menu(today_date, meal_type='breakfast')
-            friendly_date = today_date.strftime('%-d %b %Y (%A)')
-
-            if breakfast == EMPTY:
-                send_message(user, 'Sorry {}, OHS has not uploaded the breakfast menu for {} yet.'.format(first_name, friendly_date))
-            elif not breakfast:
-                send_message(user, 'Sorry {}, breakfast is not served on {}.'.format(first_name, friendly_date))
-            else:
-                send_message(user, breakfast, markdown=True)
+            handle_menu('breakfast', target_date)
 
         elif is_command('dinner'):
             if len(cmd) > 7:
-                today_date = parse_date(cmd[7:].strip())
+                target_date = parse_date(cmd[7:].strip())
             else:
-                today_date = get_today_date()
+                target_date = get_today_date()
 
-            dinner = get_menu(today_date, meal_type='dinner')
-            friendly_date = today_date.strftime('%-d %b %Y (%A)')
-
-            if dinner == EMPTY:
-                send_message(user, 'Sorry {}, OHS has not uploaded the dinner menu for {} yet.'.format(first_name, friendly_date))
-            elif not dinner:
-                send_message(user, 'Sorry {}, dinner is not served on {}.'.format(first_name, friendly_date))
-            else:
-                send_message(user, dinner, markdown=True)
+            handle_menu('dinner', target_date)
 
         elif is_command('settings'):
             send_message(user, build_settings_list(), markdown=True)
@@ -844,9 +845,19 @@ class MainPage(webapp2.RequestHandler):
 
             send_typing(uid)
             smalltalk = make_smalltalk(text, uid)
+            logging.debug(smalltalk)
 
             if smalltalk:
-                send_message(user, smalltalk)
+                st_type = smalltalk[0]
+                st_param = smalltalk[1]
+                if st_type in ['breakfast', 'dinner']:
+                    if st_param:
+                        target_date = parse_date(st_param)
+                    else:
+                        target_date = get_today_date()
+                    handle_menu(st_type, target_date)
+                else:
+                    send_message(user, st_param)
             else:
                 send_message(user, self.UNRESPONSIVE.format(first_name) + build_command_list())
 
