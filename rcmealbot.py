@@ -852,7 +852,7 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, 'You have successfully logged out. /login again?')
 
         else:
-            if user.is_group():
+            if user.is_group() or len(text) >= 256:
                 return
 
             send_typing(uid)
