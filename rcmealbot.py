@@ -295,14 +295,15 @@ def make_smalltalk(query, uid):
     try:
         logging.debug(result.content)
         response = json.loads(result.content)
-        if response.get('result').get('action') == 'breakfast':
-            return ('breakfast', response.get('result').get('parameters').get('date'))
-        elif response.get('result').get('action') == 'dinner':
-            return ('dinner', response.get('result').get('parameters').get('date'))
+        result = response.get('result')
+        action = result.get('action')
+        params = result.get('parameters')
+        if action in ['breakfast', 'dinner', 'meals']:
+            return (action, params, None)
         else:
-            smalltalk = response.get('result').get('fulfillment').get('speech')
-            logging.info(smalltalk)
-            return ('smalltalk', smalltalk)
+            speech = result.get('fulfillment').get('speech')
+            logging.info(speech)
+            return ('smalltalk', None, speech)
     except Exception as e:
         logging.warning(LOG_ERROR_APIAI_PARSE + str(e))
         return None
@@ -688,18 +689,7 @@ class MainPage(webapp2.RequestHandler):
 
         cmd = text.lower().strip()
 
-        def handle_menu(meal_type, target_date):
-            menu = get_menu(target_date, meal_type=meal_type)
-            friendly_date = target_date.strftime('%-d %b %Y (%A)')
-
-            if menu == EMPTY:
-                send_message(user, 'Sorry {}, OHS has not uploaded the {} menu for {} yet.'.format(first_name, meal_type, friendly_date))
-            elif not menu:
-                send_message(user, 'Sorry {}, {} is not served on {}.'.format(first_name, meal_type, friendly_date))
-            else:
-                send_message(user, menu, markdown=True)
-
-        if is_command('meals'):
+        def handle_meals():
             if not user.is_authenticated():
                 send_message(user, 'Did you mean to /login?')
                 return
@@ -717,6 +707,20 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             send_message(user, 'You\'ve had ' + weekly_summary(xls_data) + ' this week.\n\n' + meals, markdown=True)
+
+        def handle_menu(meal_type, target_date):
+            menu = get_menu(target_date, meal_type=meal_type)
+            friendly_date = target_date.strftime('%-d %b %Y (%A)')
+
+            if menu == EMPTY:
+                send_message(user, 'Sorry {}, OHS has not uploaded the {} menu for {} yet.'.format(first_name, meal_type, friendly_date))
+            elif not menu:
+                send_message(user, 'Sorry {}, {} is not served on {}.'.format(first_name, meal_type, friendly_date))
+            else:
+                send_message(user, menu, markdown=True)
+
+        if is_command('meals'):
+            handle_meals()
 
         elif is_command('login'):
             if user.is_authenticated():
@@ -845,19 +849,21 @@ class MainPage(webapp2.RequestHandler):
 
             send_typing(uid)
             smalltalk = make_smalltalk(text, uid)
-            logging.debug(smalltalk)
 
             if smalltalk:
                 st_type = smalltalk[0]
-                st_param = smalltalk[1]
+                st_params = smalltalk[1]
+                st_speech = smalltalk[2]
                 if st_type in ['breakfast', 'dinner']:
-                    if st_param:
-                        target_date = parse_date(st_param)
+                    if st_params.get('date'):
+                        target_date = parse_date(st_params.get('date'))
                     else:
                         target_date = get_today_date()
                     handle_menu(st_type, target_date)
+                elif st_type == 'meals':
+                    handle_meals()
                 else:
-                    send_message(user, st_param)
+                    send_message(user, st_speech)
             else:
                 send_message(user, self.UNRESPONSIVE.format(first_name) + build_command_list())
 
