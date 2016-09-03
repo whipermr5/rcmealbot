@@ -43,6 +43,7 @@ LOG_ERROR_AUTH = 'Error sending auth request for uid {} ({})'
 LOG_ERROR_QUERY = 'Error querying uid {} ({}): {}'
 LOG_ERROR_APIAI_FETCH = 'Error querying api.ai:\n'
 LOG_ERROR_APIAI_PARSE = 'Error parsing api.ai response:\n'
+LOG_FALLBACK = 'Replying with fallback speech'
 LOG_TYPE_START_NEW = 'Type: Start (new user)'
 LOG_TYPE_START_EXISTING = 'Type: Start (existing user)'
 LOG_TYPE_NON_TEXT = 'Type: Non-text'
@@ -59,6 +60,7 @@ LOG_SESSION_EXPIRED = 'Session expired for {}'
 LOG_SESSION_INACTIVE = 'Session inactive for {}'
 
 RECOGNISED_ERROR_PARSE = 'Bad Request: Can\'t parse message text'
+RECOGNISED_ERROR_EMPTY = 'Bad Request: Message text is empty'
 RECOGNISED_ERROR_MIGRATE = 'Bad Request: group chat is migrated to a supergroup chat'
 RECOGNISED_ERRORS = ('PEER_ID_INVALID',
                      'Bot was blocked by the user',
@@ -70,6 +72,7 @@ RECOGNISED_ERRORS = ('PEER_ID_INVALID',
                      'Forbidden: bot is not a member of the supergroup chat',
                      'Bad Request: chat not found',
                      'Bad Request: group chat was deactivated',
+                     RECOGNISED_ERROR_EMPTY,
                      RECOGNISED_ERROR_MIGRATE)
 
 def get_new_jsessionid():
@@ -302,6 +305,9 @@ def make_smalltalk(query, uid):
             return (action, params, None)
         else:
             speech = result.get('fulfillment').get('speech')
+            if not speech:
+                speech = 'I\'m a bit confused.'
+                logging.info(LOG_FALLBACK)
             logging.info(speech)
             return ('smalltalk', None, speech)
     except Exception as e:
@@ -535,7 +541,9 @@ def handle_response(response, user, uid, msg_type):
 
         logging.info(LOG_DID_NOT_SEND.format(msg_type, uid, user.get_description(),
                                              error_description))
-        if error_description == RECOGNISED_ERROR_MIGRATE:
+        if error_description == RECOGNISED_ERROR_EMPTY:
+            return True
+        elif error_description == RECOGNISED_ERROR_MIGRATE:
             new_uid = response.get('parameters', {}).get('migrate_to_chat_id')
             if new_uid:
                 user = user.migrate_to(new_uid)
