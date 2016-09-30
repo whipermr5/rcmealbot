@@ -1101,7 +1101,16 @@ class MenuPage(webapp2.RequestHandler):
                 else:
                     return (None, get_menu(bodies[0]))
             else:
-                return (get_menu(bodies[0]), get_menu(bodies[1]))
+                breakfast = None
+                dinner = None
+                for i in range(len(headers)):
+                    header = headers[i].text.lower()
+                    if 'breakfast' in header and not breakfast:
+                        breakfast = get_menu(bodies[i])
+                    elif 'dinner' in header and not dinner:
+                        dinner = get_menu(bodies[i])
+
+                return (breakfast, dinner)
 
         breakfasts = []
         dinners = []
