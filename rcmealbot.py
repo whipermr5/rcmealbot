@@ -1092,6 +1092,10 @@ class MenuPage(webapp2.RequestHandler):
             soup = BeautifulSoup(html, 'lxml')
             headers = soup.select('.pull-left')
             bodies = soup.select('.tbl-menuu')
+            while len(headers) < len(bodies):
+                bodies.pop(0)
+            while len(bodies) < len(headers):
+                headers.pop(0)
             if len(headers) == 0:
                 return (None, None)
             elif len(headers) == 1:
