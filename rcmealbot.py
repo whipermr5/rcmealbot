@@ -269,6 +269,7 @@ def get_today_time():
     return today_time
 
 def parse_date(friendly):
+    friendly = friendly.decode('utf-8', 'ignore')
     now = datetime.utcnow() + timedelta(hours=8)
     return parsedatetime.Calendar().parseDT(friendly, now)[0].date()
 
