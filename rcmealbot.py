@@ -1040,7 +1040,7 @@ class MenuPage(webapp2.RequestHandler):
 
         url_format = 'http://hg.sg/nus_ohs_admin/adminOHS/backend/script/index.php?' + \
                      'controller=pjFront&action=pjActionLoadEventDetail&index=4455&cate=0&dt={}'
-        start_date = datetime(2016, 7, 31).date()
+        start_date = datetime(2017, 1, 8).date()
 
         def get_category(soup):
             html = str(soup)
@@ -1157,9 +1157,13 @@ class MigratePage(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
         # data = get_data()
-        # data.notes = str({})
-        # data.cancellations = str({})
-        # data.put()
+        # new_data = Data(key_name='main_1617s1')
+        # new_data.breakfasts = data.breakfasts
+        # new_data.dinners = data.dinners
+        # new_data.start_date = data.start_date
+        # new_data.notes = data.notes
+        # new_data.cancellations = data.cancellations
+        # new_data.put()
 
 class MassPage(webapp2.RequestHandler):
     def get(self):
