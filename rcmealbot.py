@@ -1077,15 +1077,18 @@ class MenuPage(webapp2.RequestHandler):
             return output.strip()
 
         def get_menu(soup):
-            output = ''
-            for tr in soup.select('tr'):
-                tds = tr.select('td')
-                category = get_category(tds[0])
-                text = get_text(tds[1])
-                if not category and not text:
-                    continue
-                output += '*~ {} ~*\n'.format(category) + text + '\n\n'
-            return output.rstrip()
+            try:
+                output = ''
+                for tr in soup.select('tr'):
+                    tds = tr.select('td')
+                    category = get_category(tds[0])
+                    text = get_text(tds[1])
+                    if not category and not text:
+                        continue
+                    output += '*~ {} ~*\n'.format(category) + text + '\n\n'
+                return output.rstrip()
+            except:
+                return soup.text.strip()
 
         def get_menus(url):
             try:
