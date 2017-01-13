@@ -27,6 +27,7 @@ HEADING_DINNER = u'\U0001F35C' + ' *Dinner*'
 NOTE_FRUIT = '\n\n' + u'\U0001F34A' + ' _Fruits will be served at the counter_'
 NOTE_UNSUBSCRIBE = '\n\n(use /dailyoff to unsubscribe)'
 NOTE_UNSUBSCRIBE_WEEKLY = '\n\n(use /weeklyoff to unsubscribe)'
+THRESHOLD_VALID_MENU_LENGTH = 50
 EMPTY = 'empty'
 
 LOG_SENT = '{} {} sent to uid {} ({})'
@@ -251,7 +252,8 @@ def get_menu(today_date, meal_type, is_auto=False):
         menu = menus[day]
         if not menu:
             return None
-        menu += NOTE_FRUIT
+        if len(menu) > THRESHOLD_VALID_MENU_LENGTH:
+            menu += NOTE_FRUIT
 
     if is_auto:
         menu += NOTE_UNSUBSCRIBE
