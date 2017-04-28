@@ -565,8 +565,6 @@ def handle_response(response, user, uid, msg_type):
 
         user.set_active(False)
         user.set_active_weekly(False)
-        if msg_type == 'promo':
-            user.set_promo(False)
 
     return True
 
