@@ -981,26 +981,13 @@ class MessagePage(webapp2.RequestHandler):
 
 class AuthPage(webapp2.RequestHandler):
     def run(self):
-        query = User.all()
+        query = User.all(keys_only=True)
         query.filter('auth =', True)
 
-        def queue_reauth(user):
-            uid = user.get_uid()
-            taskqueue.add(url='/reauth', payload=uid)
-            logging.info(LOG_ENQUEUED.format('reauth', uid, user.get_description()))
-
         try:
-            for user in query.run(batch_size=500):
-                result = check_auth(user.jsessionid)
-                if result:
-                    logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
-                elif result == None:
-                    logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
-                    queue_reauth(user)
-                else:
-                    logging.info(LOG_SESSION_EXPIRED.format(user.get_description()))
-                    user.set_authenticated(False)
-                    send_message(user, SESSION_EXPIRED.format(user.get_first_name()))
+            for key in query.run(batch_size=500):
+                uid = key.name()
+                taskqueue.add(queue_name='reauth', url='/reauth', payload=uid)
         except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
             return False
