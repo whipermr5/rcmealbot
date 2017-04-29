@@ -6,7 +6,7 @@ import xlrd
 import ast
 import parsedatetime
 from google.appengine.api import urlfetch, taskqueue
-from google.appengine.ext import db
+from google.appengine.ext import ndb
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 
@@ -323,27 +323,30 @@ def make_smalltalk(query, uid):
         logging.warning(LOG_ERROR_APIAI_PARSE + str(e))
         return None
 
-class User(db.Model):
-    username = db.StringProperty(indexed=False)
-    first_name = db.StringProperty(multiline=True, indexed=False)
-    last_name = db.StringProperty(multiline=True, indexed=False)
-    created = db.DateTimeProperty(auto_now_add=True)
-    last_received = db.DateTimeProperty(auto_now_add=True, indexed=False)
-    last_sent = db.DateTimeProperty(indexed=False)
-    last_auto = db.DateTimeProperty(auto_now_add=True)
-    last_weekly = db.DateTimeProperty(auto_now_add=True)
-    active = db.BooleanProperty(default=True)
-    active_weekly = db.BooleanProperty(default=True)
+class User(ndb.Model):
+    username = ndb.StringProperty(indexed=False)
+    first_name = ndb.TextProperty()
+    last_name = ndb.TextProperty()
 
-    jsessionid = db.StringProperty(indexed=False)
-    auth = db.BooleanProperty(default=False)
+    created = ndb.DateTimeProperty(auto_now_add=True)
+    last_received = ndb.DateTimeProperty(auto_now=True, indexed=False)
 
-    full_name = db.StringProperty(indexed=False)
-    matric = db.StringProperty(indexed=False)
-    meal_pref = db.StringProperty(indexed=False)
+    last_sent = ndb.DateTimeProperty(indexed=False)
+
+    last_auto = ndb.DateTimeProperty(auto_now_add=True)
+    last_weekly = ndb.DateTimeProperty(auto_now_add=True)
+    active = ndb.BooleanProperty(default=True)
+    active_weekly = ndb.BooleanProperty(default=True)
+
+    jsessionid = ndb.StringProperty(indexed=False)
+    auth = ndb.BooleanProperty(default=False)
+
+    full_name = ndb.StringProperty(indexed=False)
+    matric = ndb.StringProperty(indexed=False)
+    meal_pref = ndb.StringProperty(indexed=False)
 
     def get_uid(self):
-        return self.key().name()
+        return self.key.id()
 
     def get_first_name(self):
         return self.first_name.encode('utf-8', 'ignore').strip()
@@ -394,10 +397,6 @@ class User(db.Model):
         self.jsessionid = jsessionid
         self.put()
 
-    def update_last_received(self):
-        self.last_received = datetime.now()
-        self.put()
-
     def update_last_sent(self):
         self.last_sent = datetime.now()
         self.put()
@@ -411,49 +410,41 @@ class User(db.Model):
         self.put()
 
     def migrate_to(self, uid):
-        props = dict((prop, getattr(self, prop)) for prop in self.properties().keys())
-        props.update(key_name=str(uid))
-        new_user = User(**props)
+        props = dict((prop, getattr(self, prop)) for prop in self._properties.keys())
+        new_user = User(id=str(uid))
+        new_user.populate(**props)
         new_user.put()
-        self.delete()
+        self.key.delete()
         return new_user
 
-class Data(db.Model):
-    breakfasts = db.TextProperty()
-    dinners = db.TextProperty()
-    notes = db.TextProperty()
-    cancellations = db.TextProperty()
-    start_date = db.DateProperty(indexed=False)
+class Data(ndb.Model):
+    breakfasts = ndb.TextProperty()
+    dinners = ndb.TextProperty()
+    notes = ndb.TextProperty()
+    cancellations = ndb.TextProperty()
+    start_date = ndb.DateProperty(indexed=False)
 
 def get_user(uid):
-    key = db.Key.from_path('User', str(uid))
-    user = db.get(key)
-    if user == None:
-        user = User(key_name=str(uid), first_name='-')
+    user = ndb.Key('User', str(uid)).get()
+    if user is None:
+        user = User(id=str(uid), first_name='-')
         user.put()
     return user
 
 def get_data():
-    key = db.Key.from_path('Data', 'main')
-    data = db.get(key)
-    if data == None:
-        data = Data(key_name='main')
+    data = ndb.Key('Data', 'main').get()
+    if data is None:
+        data = Data(id='main')
         data.put()
     return data
 
 def update_profile(uid, uname, fname, lname):
-    existing_user = get_user(uid)
-    if existing_user:
-        existing_user.username = uname
-        existing_user.first_name = fname
-        existing_user.last_name = lname
-        existing_user.update_last_received()
-        #existing_user.put()
-        return existing_user
-    else:
-        user = User(key_name=str(uid), username=uname, first_name=fname, last_name=lname)
-        user.put()
-        return user
+    user = get_user(uid)
+    user.username = uname
+    user.first_name = fname
+    user.last_name = lname
+    user.put()
+    return user
 
 def telegram_post(data, deadline=3):
     return urlfetch.fetch(url=TELEGRAM_URL_SEND, payload=data, method=urlfetch.POST,
@@ -559,7 +550,7 @@ def handle_response(response, user, uid, msg_type):
                 logging.info(LOG_USER_MIGRATED.format(uid, new_uid, user.get_description()))
         else:
             user_description = user.get_description()
-            user.delete()
+            user.key.delete()
             logging.info(LOG_USER_DELETED.format(uid, user_description))
             return True
 
@@ -668,8 +659,8 @@ class MainPage(webapp2.RequestHandler):
                 name_string += ' @' + actual_username
             return name_string
 
-        if user.last_sent == None or text == '/start':
-            if user.last_sent == None:
+        if user.last_sent is None or text == '/start':
+            if user.last_sent is None:
                 logging.info(LOG_TYPE_START_NEW)
                 new_user = True
             else:
@@ -687,7 +678,7 @@ class MainPage(webapp2.RequestHandler):
 
             return
 
-        if text == None:
+        if text is None:
             logging.info(LOG_TYPE_NON_TEXT)
             migrate_to_chat_id = msg.get('migrate_to_chat_id')
             if migrate_to_chat_id:
@@ -897,12 +888,10 @@ class DailyPage(webapp2.RequestHandler):
 
         expected_time_after_update = get_today_time() + timedelta(hours=hours)
 
-        query = User.all()
-        query.filter('active =', True)
-        query.filter('last_auto <', expected_time_after_update)
+        query = User.query(User.active == True, User.last_auto < expected_time_after_update)
 
         try:
-            for user in query.run(batch_size=500):
+            for user in query.iter(batch_size=500):
                 send_message(user, menu, msg_type=msg_type, markdown=True)
         except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
@@ -922,13 +911,10 @@ class DailyPage(webapp2.RequestHandler):
 
 class WeeklyPage(webapp2.RequestHandler):
     def run(self):
-        query = User.all()
-        query.filter('auth =', True)
-        query.filter('active_weekly =', True)
-        query.filter('last_weekly <', get_today_time())
+        query = User.query(User.auth == True, User.active_weekly == True, User.last_weekly < get_today_time())
 
         try:
-            for user in query.run(batch_size=500):
+            for user in query.iter(batch_size=500):
 
                 xls_data = check_meals(user.jsessionid, get_excel=True)
                 meals = check_meals(user.jsessionid)
@@ -979,12 +965,11 @@ class MessagePage(webapp2.RequestHandler):
 
 class AuthPage(webapp2.RequestHandler):
     def run(self):
-        query = User.all(keys_only=True)
-        query.filter('auth =', True)
+        query = User.query(User.auth == True)
 
         try:
-            for key in query.run(batch_size=500):
-                uid = key.name()
+            for key in query.iter(batch_size=500, keys_only=True):
+                uid = key.id()
                 taskqueue.add(queue_name='reauth', url='/reauth', payload=uid)
         except Exception as e:
             logging.warning(LOG_ERROR_DATASTORE + str(e))
@@ -1012,7 +997,7 @@ class ReauthPage(webapp2.RequestHandler):
         result = check_auth(user.jsessionid)
         if result:
             logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
-        elif result == None:
+        elif result is None:
             logging.warning(LOG_ERROR_AUTH.format(user.get_uid(), user.get_description()))
             self.abort(502)
         else:
@@ -1149,7 +1134,7 @@ class MigratePage(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
         # data = get_data()
-        # new_data = Data(key_name='main_1617s1')
+        # new_data = Data(id='main_1617s1')
         # new_data.breakfasts = data.breakfasts
         # new_data.dinners = data.dinners
         # new_data.start_date = data.start_date
@@ -1164,9 +1149,9 @@ class MassPage(webapp2.RequestHandler):
     def post(self):
         # try:
         #     # one_hour_ago = datetime.now() - timedelta(hours=1)
-        #     query = User.all()
-        #     # query.filter('created <', one_hour_ago)
-        #     for user in query.run(batch_size=500):
+        #     query = User.query()
+        #     # query = query.filter(User.created < one_hour_ago)
+        #     for user in query.iter(batch_size=500):
         #         mass_msg = '*Update*\n\nThank you for using @rcmealbot and for giving valuable feedback! ' + \
         #         'Here are some *improvements* to the bot:\n\n' + \
         #         u'\U0001F539' + ' /breakfast and /dinner menus are now *separate*\n' + \
@@ -1183,8 +1168,8 @@ class MassPage(webapp2.RequestHandler):
 class VerifyPage(webapp2.RequestHandler):
     def get(self):
         try:
-            query = User.all()
-            for user in query.run(batch_size=3000):
+            query = User.query()
+            for user in query.iter(batch_size=3000):
                 uid = str(user.get_uid())
                 taskqueue.add(url='/verify', payload=uid)
             self.response.headers['Content-Type'] = 'text/plain'
@@ -1214,7 +1199,7 @@ class VerifyPage(webapp2.RequestHandler):
                     logging.info(LOG_USER_MIGRATED.format(uid, new_uid, user.get_description()))
             elif error_description in RECOGNISED_ERRORS:
                 user_description = user.get_description()
-                user.delete()
+                user.key.delete()
                 logging.info(LOG_USER_DELETED.format(uid, user_description))
             else:
                 logging.warning(LOG_USER_UNREACHABLE.format(uid, user.get_description(), error_description))
