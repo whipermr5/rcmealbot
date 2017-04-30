@@ -420,8 +420,8 @@ class User(ndb.Model):
 class Data(ndb.Model):
     breakfasts = ndb.TextProperty()
     dinners = ndb.TextProperty()
-    notes = ndb.TextProperty()
-    cancellations = ndb.TextProperty()
+    notes = ndb.TextProperty(default='{}')
+    cancellations = ndb.TextProperty(default='{}')
     start_date = ndb.DateProperty(indexed=False)
 
 def get_user(uid):
