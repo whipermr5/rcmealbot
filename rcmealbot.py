@@ -1014,7 +1014,11 @@ class MenuPage(webapp2.RequestHandler):
 
         url_format = 'http://hg.sg/nus_ohs_admin/adminOHS/backend/script/index.php?' + \
                      'controller=pjFront&action=pjActionLoadEventDetail&index=4455&cate=0&dt={}'
-        start_date = datetime(2017, 1, 8).date()
+
+        data = get_data()
+        start_date = data.start_date
+        start_date_text = start_date.strftime('%d %b %Y')
+        logging.info('Starting menu update from {}'.format(start_date_text))
 
         def get_category(soup):
             html = str(soup)
@@ -1113,13 +1117,10 @@ class MenuPage(webapp2.RequestHandler):
             dinners.append(dinner)
 
         days = len(breakfasts)
-        data = get_data()
         if commit:
             data.breakfasts = str(breakfasts)
             data.dinners = str(dinners)
-            data.start_date = start_date
             data.put()
-            start_date_text = start_date.strftime('%d %b %Y')
             logging.info('Updated menu from {} for {} days'.format(start_date_text, days))
         else:
             changed = str(breakfasts) != data.breakfasts or str(dinners) != data.dinners
