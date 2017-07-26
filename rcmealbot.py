@@ -1020,32 +1020,41 @@ class MenuPage(webapp2.RequestHandler):
         start_date_text = start_date.strftime('%d %b %Y')
         logging.info('Starting menu update from {}'.format(start_date_text))
 
-        def get_category(soup):
-            html = str(soup)
-            if 'helpyourself.png' in html:
+        def detect_category(img_src):
+            if 'helpyourself.png' in img_src:
                 return 'Help Yourself'
-            elif 'western.png' in html:
+            elif 'western.png' in img_src:
                 return 'Western'
-            elif 'timsum.png' in html:
+            elif 'timsum.png' in img_src:
                 return 'Tim Sum'
-            elif 'asian.png' in html:
+            elif 'asian.png' in img_src:
                 return 'Asian'
-            elif 'veg.png' in html:
+            elif 'veg.png' in img_src:
                 return 'Vegetarian'
-            elif 'muslim.png' in html:
+            elif 'muslim.png' in img_src:
                 return 'Malay (Halal)'
-            elif 'grab.png' in html:
+            elif 'grab.png' in img_src:
                 return 'Grab & Go'
-            elif 'indian.png' in html:
+            elif 'indian.png' in img_src:
                 return 'Indian'
-            elif 'noodle.png' in html:
+            elif 'noodle.png' in img_src:
                 return 'Noodle'
-            elif 'specials.png' in html:
+            elif 'specials.png' in img_src:
                 return 'Special of the Day'
-            elif 'extra.png' in html:
+            elif 'extra.png' in img_src:
                 return 'Extra'
             else:
-                return soup.text.strip().title()
+                return None
+
+        def get_categories(category_img_data):
+            categories = []
+            for category_img in category_img_data.select('img'):
+                detected_category = detect_category(category_img.get('src'))
+                if detected_category:
+                    categories.append(detected_category)
+            if not categories:
+                return category_img_data.text.strip().title()
+            return ' / '.join(categories)
 
         def get_text(menu_items):
             return '\n'.join([menu_item.text.strip() for menu_item in menu_items.select('td')])
@@ -1055,7 +1064,7 @@ class MenuPage(webapp2.RequestHandler):
                 output = ''
                 for category_row in day_menu.select('> tbody > tr'):
                     category_data = category_row.select('td')
-                    category = get_category(category_data[0])
+                    category = get_categories(category_data[0])
                     text = get_text(category_data[1])
                     if not category and not text:
                         continue
