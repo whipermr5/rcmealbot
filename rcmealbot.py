@@ -1042,31 +1042,27 @@ class MenuPage(webapp2.RequestHandler):
                 return 'Noodle'
             elif 'specials.png' in html:
                 return 'Special of the Day'
+            elif 'extra.png' in html:
+                return 'Extra'
             else:
                 return soup.text.strip().title()
 
-        def get_text(soup):
-            for tag in soup.select('br'):
-                tag.name = 'span'
-                tag.string = '\n'
-            output = ''
-            for line in soup.text.split('\n'):
-                output += line.strip() + '\n'
-            return output.strip()
+        def get_text(menu_items):
+            return '\n'.join([menu_item.text.strip() for menu_item in menu_items.select('td')])
 
-        def get_menu(soup):
+        def get_menu(day_menu):
             try:
                 output = ''
-                for tr in soup.select('tr'):
-                    tds = tr.select('td')
-                    category = get_category(tds[0])
-                    text = get_text(tds[1])
+                for category_row in day_menu.select('> tbody > tr'):
+                    category_data = category_row.select('td')
+                    category = get_category(category_data[0])
+                    text = get_text(category_data[1])
                     if not category and not text:
                         continue
                     output += '*~ {} ~*\n'.format(category) + text + '\n\n'
                 return output.rstrip()
             except:
-                return soup.text.strip()
+                return day_menu.text.strip()
 
         def get_menus(url):
             try:
