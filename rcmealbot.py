@@ -1054,7 +1054,8 @@ class MenuPage(webapp2.RequestHandler):
                     categories.append(detected_category)
             if not categories:
                 return category_img_data.text.strip().title()
-            return ' / '.join(categories)
+            categories_set = sorted(set(categories), key=categories.index)
+            return ' / '.join(categories_set)
 
         def get_text(menu_items):
             return '\n'.join([menu_item.text.strip() for menu_item in menu_items.select('td')])
