@@ -93,26 +93,28 @@ def get_new_jsessionid():
 
     html = result.content
     idx = html.find('jsessionid=') + 11
-    jsessionid = html[idx:idx+33]
+    jsessionid = html[idx:idx+68]
     return jsessionid
 
-def check_auth(jsessionid):
-    url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
+def check_auth(user):
+    url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + user.jsessionid
 
     try:
         result = urlfetch.fetch(url, method=urlfetch.HEAD, follow_redirects=False, deadline=10)
+        user.inc_jsessionid()
     except Exception as e:
         logging.warning(LOG_ERROR_REMOTE + str(e))
         return None
 
     return result.status_code == 200
 
-def check_meals(jsessionid, first_time_user=None, get_excel=False):
-    url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + jsessionid
-    logging.debug(LOG_AUTH + jsessionid)
+def check_meals(user, first_time_user=False, get_excel=False):
+    url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + user.jsessionid
+    logging.debug(LOG_AUTH + user.jsessionid)
 
     try:
         result = urlfetch.fetch(url, follow_redirects=False, deadline=10)
+        user.inc_jsessionid()
     except Exception as e:
         logging.warning(LOG_ERROR_REMOTE + str(e))
         return None
@@ -133,6 +135,7 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
 
         try:
             xls_result = urlfetch.fetch(xls_url, follow_redirects=False, deadline=10)
+            user.inc_jsessionid()
         except Exception as e:
             logging.warning(LOG_ERROR_REMOTE + str(e))
             return None
@@ -156,10 +159,10 @@ def check_meals(jsessionid, first_time_user=None, get_excel=False):
         meal_pref = html[start:end].replace('&nbsp;', ' ').strip()
 
         try:
-            first_time_user.full_name = BeautifulSoup(full_name, 'lxml').text
-            first_time_user.matric = matric
-            first_time_user.meal_pref = meal_pref
-            first_time_user.put()
+            user.full_name = BeautifulSoup(full_name, 'lxml').text
+            user.matric = matric
+            user.meal_pref = meal_pref
+            user.put()
         except:
             logging.warning('Error parsing user info: assuming auth failure')
             logging.debug(html)
@@ -396,6 +399,11 @@ class User(ndb.Model):
     def set_jsessionid(self, jsessionid):
         self.jsessionid = jsessionid
         self.put()
+
+    def inc_jsessionid(self):
+        prev_ver = int(self.jsessionid[67:])
+        new_jsessionid = self.jsessionid[:67] + str(prev_ver + 1)
+        self.set_jsessionid(new_jsessionid)
 
     def update_last_sent(self):
         self.last_sent = datetime.now()
@@ -701,8 +709,8 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             send_typing(uid)
-            xls_data = check_meals(user.jsessionid, get_excel=True)
-            meals = check_meals(user.jsessionid)
+            xls_data = check_meals(user, get_excel=True)
+            meals = check_meals(user)
 
             if not xls_data or not meals:
                 send_message(user, self.REMOTE_ERROR.format(first_name))
@@ -742,9 +750,9 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             url = BASE_URL + 'login.do;jsessionid=' + jsessionid
-            response = 'Login here: ' + url + '\n\nWhen done, come back here and type /continue'
+            response = 'Login here: ' + url + '\n\nAfter logging in, close the page (be sure not to click on any links), come back here and type /continue'
 
-            user.set_jsessionid(jsessionid)
+            user.set_jsessionid(jsessionid[:67] + '1')
             send_message(user, response)
 
         elif is_command('continue'):
@@ -753,7 +761,7 @@ class MainPage(webapp2.RequestHandler):
                 return
 
             send_typing(uid)
-            welcome = check_meals(user.jsessionid, first_time_user=user)
+            welcome = check_meals(user, first_time_user=True)
 
             if not welcome:
                 send_message(user, self.REMOTE_ERROR.format(first_name))
@@ -776,8 +784,8 @@ class MainPage(webapp2.RequestHandler):
             send_message(user, welcome, markdown=True)
 
             send_typing(uid)
-            xls_data = check_meals(user.jsessionid, get_excel=True)
-            meals = check_meals(user.jsessionid)
+            xls_data = check_meals(user, get_excel=True)
+            meals = check_meals(user)
 
             if not xls_data or not meals or xls_data == UNAUTHORISED or meals == UNAUTHORISED:
                 return
@@ -916,8 +924,8 @@ class WeeklyPage(webapp2.RequestHandler):
         try:
             for user in query.iter(batch_size=500):
 
-                xls_data = check_meals(user.jsessionid, get_excel=True)
-                meals = check_meals(user.jsessionid)
+                xls_data = check_meals(user, get_excel=True)
+                meals = check_meals(user)
 
                 if not xls_data or not meals:
                     self.abort(502)
@@ -994,7 +1002,7 @@ class ReauthPage(webapp2.RequestHandler):
             user.set_authenticated(False)
             return
 
-        result = check_auth(user.jsessionid)
+        result = check_auth(user)
         if result:
             logging.info(LOG_SESSION_ALIVE.format(user.get_description()))
         elif result is None:
