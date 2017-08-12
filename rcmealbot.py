@@ -98,6 +98,7 @@ def get_new_jsessionid():
 
 def check_auth(user):
     url = BASE_URL + 'studstaffMealBalance.do;jsessionid=' + user.jsessionid
+    logging.debug(LOG_AUTH + user.jsessionid)
 
     try:
         result = urlfetch.fetch(url, method=urlfetch.HEAD, follow_redirects=False, deadline=10)
