@@ -1067,7 +1067,13 @@ class MenuPage(webapp2.RequestHandler):
             return ' / '.join(categories_set)
 
         def get_text(menu_items):
-            return '\n'.join([menu_item.text.strip() for menu_item in menu_items.select('td')])
+            lines = menu_items.select('td')
+            if lines:
+                return '\n'.join([line.text.strip() for line in lines])
+            for tag in menu_items.select('br'):
+                tag.name = 'span'
+                tag.string = '\n'
+            return menu_items.text.strip()
 
         def get_menu(day_menu):
             try:
