@@ -258,6 +258,8 @@ def get_menu(today_date, meal_type, is_auto=False):
         menu = menus[day]
         if not menu:
             return None
+        if menu == EMPTY:
+            return EMPTY
         if len(menu) > THRESHOLD_VALID_MENU_LENGTH:
             menu += NOTE_FRUIT
 
@@ -1126,12 +1128,12 @@ class MenuPage(webapp2.RequestHandler):
         breakfasts = []
         dinners = []
         days = 0
-        while True:
+        while days < 126: # 18-week semester
             url = url_format.format((start_date + timedelta(days=days)).strftime('%Y-%m-%d'))
             days += 1
             result = get_menus(url)
             if result == (None, None):
-                break
+                result = (EMPTY, EMPTY)
             breakfast = result[0]
             dinner = result[1]
             breakfasts.append(breakfast)
