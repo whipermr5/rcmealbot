@@ -19,7 +19,7 @@ APIAI_URL = 'https://api.api.ai/v1/query?v=20150910'
 APIAI_HEADER = {'Content-Type': 'application/json;charset=utf-8',
                 'Authorization': 'Bearer ' + APIAI_TOKEN}
 
-BASE_URL = 'https://myaces.nus.edu.sg/Prjhml/'
+BASE_URL = 'https://aces.nus.edu.sg/Prjhml/'
 UNAUTHORISED = 'unauthorised'
 SESSION_EXPIRED = 'Sorry {}, your session has expired. Please /login again.'
 HEADING_BREAKFAST = u'\U0001F32E' + ' *Breakfast*'
