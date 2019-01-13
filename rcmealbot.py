@@ -776,9 +776,9 @@ class MainPage(webapp2.RequestHandler):
                 response += 'The link must be opened in a fresh browser that has never been used to browse the RC dining portal before. ' + \
                             'Try one of the following:\n'
                 response += '- copy and paste the link into a new incognito (Chrome) or private browsing (Safari) window\n'
-                response += '- clear the cookies/site data for myaces.nus.edu.sg in your current browser before opening the link:\n'
-                response += '-- Chrome app -> browse to myaces.nus.edu.sg -> tap the green lock -> Site Settings -> Clear & Reset\n'
-                response += '-- Settings app -> Safari -> Advanced -> Website Data -> Edit -> delete entry for myaces.nus.edu.sg\n'
+                response += '- clear the cookies/site data for aces.nus.edu.sg in your current browser before opening the link:\n'
+                response += '-- Chrome app -> browse to aces.nus.edu.sg -> tap the green lock -> Site Settings -> Clear & Reset\n'
+                response += '-- Settings app -> Safari -> Advanced -> Website Data -> Edit -> delete entry for aces.nus.edu.sg\n'
                 response += '- open the link with another browser (one you have never used to browse the RC dining portal before)\n'
                 send_message(user, response)
                 return
@@ -1024,7 +1024,7 @@ class MenuPage(webapp2.RequestHandler):
             commit = False
 
         url_format = 'http://hg.sg/nus_ohs_admin/adminOHS/backend/script/index.php?' + \
-                     'controller=pjFront&action=pjActionLoadEventDetail&index=4455&cate=0&dt={}'
+                     'controller=pjFront&action=pjActionLoadEventDetail&index=6845&cate=0&dt={}'
 
         data = get_data()
         start_date = data.start_date
