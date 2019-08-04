@@ -583,7 +583,7 @@ class MainPage(webapp2.RequestHandler):
     WELCOME = 'Hello, {}! Welcome! To get started, enter one of the following commands:\n\n'
     HELP = 'Hi {}! Please enter one of the following commands:\n\n'
     ABOUT = 'Created by @whipermr5. Comments, feedback and suggestions are welcome!\n\n' + \
-            'Food menu extracted from http://nus.edu.sg/ohs/current-residents/students/dining-daily.php\n\n' + \
+            'Food menu extracted from https://uci.nus.edu.sg/ohs/current-residents/students/daily-menu/\n\n' + \
             'P.S. CAPT rocks! And God loves you :)'
     UNRESPONSIVE = 'Sorry {}, my logic module isn\'t responding. Talking to humans is hard :( ' + \
                    'Let it rest for awhile and try one of the following dumb commands instead:\n\n'
