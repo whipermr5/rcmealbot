@@ -1158,7 +1158,7 @@ class MigratePage(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'text/plain'
         self.response.write('Migrate page\n')
         # data = get_data()
-        # new_data = Data(id='main_1718s1')
+        # new_data = Data(id='main_1819s2')
         # new_data.breakfasts = data.breakfasts
         # new_data.dinners = data.dinners
         # new_data.start_date = data.start_date
